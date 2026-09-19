@@ -1,0 +1,35 @@
+# Entorno virtual
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Variables de entorno (nunca subir secretos)
+.env
+.env.*
+!.env.example
+
+# Base de datos local / instancia de Flask
+instance/
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores / IDEs
+.vscode/
+.idea/
+*.swp

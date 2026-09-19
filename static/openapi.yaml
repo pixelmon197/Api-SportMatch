@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: Api-SportMatch
+  description: API REST de SportMatch.
+  version: 0.1.0
+servers:
+  - url: http://localhost:5000
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+paths:
+  /api/health:
+    get:
+      summary: Estado del servicio
+      tags: [Sistema]
+      responses:
+        "200":
+          description: El servicio está activo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  proyecto:
+                    type: string
+                    example: SportMatch
