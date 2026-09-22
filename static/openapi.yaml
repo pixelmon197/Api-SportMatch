@@ -1,8 +1,11 @@
 openapi: 3.0.3
 info:
   title: Api-SportMatch
-  description: API REST de SportMatch.
-  version: 0.1.0
+  description: >
+    API REST de SportMatch. Fase 2: autenticación, usuarios y administradores.
+    Ver /docs/entidades_completas.md en el repositorio para el catálogo
+    completo de las 89 entidades del modelo (fases 3 y 4).
+  version: 0.2.0
 servers:
   - url: http://localhost:5000
 components:
@@ -11,22 +14,204 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  schemas:
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre_completo: { type: string }
+        correo: { type: string }
+        nombre_usuario: { type: string }
+        rol: { type: string, enum: [usuario, admin] }
+        estado_cuenta: { type: string, enum: [activa, suspendida, eliminada] }
+        telefono: { type: string }
+        ciudad: { type: object, nullable: true }
+        creado_en: { type: string, format: date-time }
+security:
+  - bearerAuth: []
 paths:
   /api/health:
     get:
       summary: Estado del servicio
       tags: [Sistema]
+      security: []
       responses:
-        "200":
-          description: El servicio está activo
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  proyecto:
-                    type: string
-                    example: SportMatch
+        "200": { description: El servicio está activo }
+
+  /api/auth/register:
+    post:
+      summary: Autoregistro (siempre crea rol "usuario")
+      tags: [Autenticación]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_completo, nombre_usuario, correo, password]
+              properties:
+                nombre_completo: { type: string, example: "Ana Pérez" }
+                nombre_usuario: { type: string, example: "anaperez" }
+                correo: { type: string, example: "ana@correo.com" }
+                password: { type: string, example: "MiClave123!" }
+                telefono: { type: string }
+                sexo: { type: string }
+                ciudad_id: { type: integer }
+      responses:
+        "201": { description: Usuario creado, regresa access_token + usuario }
+        "400": { description: Campos faltantes }
+        "409": { description: Correo o nombre de usuario ya existen }
+
+  /api/auth/login:
+    post:
+      summary: Iniciar sesión
+      tags: [Autenticación]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correo, password]
+              properties:
+                correo: { type: string, example: "admin@sportmatch.com" }
+                password: { type: string, example: "Admin123!" }
+      responses:
+        "200": { description: Login exitoso, regresa access_token + usuario }
+        "401": { description: Credenciales inválidas }
+        "403": { description: Cuenta suspendida o eliminada }
+
+  /api/auth/me:
+    get:
+      summary: Datos del usuario autenticado
+      tags: [Autenticación]
+      responses:
+        "200": { description: Usuario actual }
+
+  /api/usuarios/me:
+    put:
+      summary: Actualizar mi propio perfil
+      tags: [Usuarios]
+      responses:
+        "200": { description: Usuario actualizado }
+
+  /api/usuarios/me/password:
+    put:
+      summary: Cambiar mi contraseña
+      tags: [Usuarios]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password_actual, password_nueva]
+              properties:
+                password_actual: { type: string }
+                password_nueva: { type: string }
+      responses:
+        "200": { description: Contraseña actualizada }
+        "401": { description: Contraseña actual incorrecta }
+
+  /api/usuarios:
+    get:
+      summary: Listar usuarios (solo admin)
+      tags: [Administradores]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: rol
+          in: query
+          schema: { type: string, enum: [usuario, admin] }
+        - name: estado_cuenta
+          in: query
+          schema: { type: string, enum: [activa, suspendida, eliminada] }
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Lista paginada de usuarios }
+        "403": { description: No tienes permisos }
+
+  /api/usuarios/{usuario_id}:
+    get:
+      summary: Obtener un usuario por id (solo admin)
+      tags: [Administradores]
+      parameters:
+        - name: usuario_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Usuario encontrado }
+        "404": { description: No existe }
+
+  /api/usuarios/{usuario_id}/rol:
+    put:
+      summary: Cambiar el rol de un usuario (solo admin)
+      tags: [Administradores]
+      parameters:
+        - name: usuario_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol]
+              properties:
+                rol: { type: string, enum: [usuario, admin] }
+      responses:
+        "200": { description: Rol actualizado }
+        "400": { description: Rol inválido }
+
+  /api/usuarios/{usuario_id}/estado:
+    put:
+      summary: Activar, suspender o eliminar (borrado suave) un usuario (solo admin)
+      tags: [Administradores]
+      parameters:
+        - name: usuario_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado_cuenta]
+              properties:
+                estado_cuenta: { type: string, enum: [activa, suspendida, eliminada] }
+      responses:
+        "200": { description: Estado actualizado }
+        "400": { description: Estado inválido }
+
+  /api/usuarios/admins:
+    post:
+      summary: Crear otro administrador (solo admin)
+      tags: [Administradores]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_completo, nombre_usuario, correo, password]
+              properties:
+                nombre_completo: { type: string }
+                nombre_usuario: { type: string }
+                correo: { type: string }
+                password: { type: string }
+      responses:
+        "201": { description: Administrador creado }
+        "409": { description: Correo o nombre de usuario ya existen }

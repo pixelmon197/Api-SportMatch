@@ -6,9 +6,8 @@ from flask_swagger_ui import get_swaggerui_blueprint
 from config import Config
 from database import db
 
-# Aquí se importan los blueprints conforme se vayan creando en routes/:
-# from routes.auth import auth_bp
-# from routes.usuarios import usuarios_bp
+from routes.auth import auth_bp
+from routes.usuarios import usuarios_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -23,9 +22,8 @@ def create_app(config_class=Config):
     db.init_app(app)
     JWTManager(app)
 
-    # Registro de blueprints:
-    # app.register_blueprint(auth_bp)
-    # app.register_blueprint(usuarios_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(usuarios_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,
@@ -42,6 +40,14 @@ def create_app(config_class=Config):
         import models  # noqa: F401  (registra los modelos antes de create_all)
 
         db.create_all()
+
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({"error": "Recurso no encontrado"}), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        return jsonify({"error": "Error interno del servidor"}), 500
 
     return app
 

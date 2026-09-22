@@ -17,10 +17,8 @@ htmlcov/
 .env.*
 !.env.example
 
-# Base de datos local / instancia de Flask
+# Instancia de Flask
 instance/
-*.db
-*.sqlite3
 
 # Logs
 *.log

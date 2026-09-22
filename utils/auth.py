@@ -1,16 +1,15 @@
 from functools import wraps
 
 from flask import jsonify
-from flask_jwt_extended import verify_jwt_in_request, get_jwt
+from flask_jwt_extended import verify_jwt_in_request, get_jwt, get_jwt_identity
 
-# Nombres de rol tal como estarán en la tabla `roles`.
-ROL_ADMIN = "admin"
+from models import Usuario
 
 
 def roles_required(*roles):
     """
     Exige un JWT válido y que el rol del usuario esté en `roles`.
-    Uso: @roles_required(ROL_ADMIN) o @roles_required(ROL_ADMIN, "otro_rol")
+    Uso: @roles_required("admin") o @roles_required("admin", "usuario")
     """
 
     def decorador(fn):
@@ -31,4 +30,15 @@ def roles_required(*roles):
 
 def admin_required(fn):
     """Exige un JWT válido con rol 'admin'."""
-    return roles_required(ROL_ADMIN)(fn)
+    return roles_required("admin")(fn)
+
+
+def usuario_autenticado_required(fn):
+    """Exige un JWT válido, sin importar el rol."""
+    return roles_required("usuario", "admin")(fn)
+
+
+def get_usuario_actual():
+    """Regresa el objeto Usuario autenticado a partir del JWT (o None)."""
+    verify_jwt_in_request()
+    return Usuario.query.get(int(get_jwt_identity()))
