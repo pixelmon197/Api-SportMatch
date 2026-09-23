@@ -47,6 +47,7 @@ class Usuario(db.Model):
     eliminado_en = db.Column(db.DateTime, nullable=True)  # borrado suave
 
     ciudad = db.relationship("Ciudad")
+    deportes = db.relationship("UsuarioDeporte", cascade="all, delete-orphan")
 
     def set_password(self, password: str) -> None:
         self.contrasena_hash = generate_password_hash(password)

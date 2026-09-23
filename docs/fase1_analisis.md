@@ -76,3 +76,23 @@ modelo cubiertas: `usuarios`, `ciudades`, `tockens_verificacion`,
   sobre los datos de suplementos/órdenes). Para SportMatch el candidato
   natural es analítica sobre `inscripciones`, `eventos`, `pagos` y
   `valoraciones_evento`.
+
+## 5. Actualización — Fase 3 en curso
+
+Módulos ya implementados (con CRUD probado end-to-end):
+
+- **Deportes**: `Deportes` → `Deporte`; `usuarios_deportes` → `UsuarioDeporte`.
+- **Cuestionario de registro**: `cuestionarios`, `preguntas`,
+  `opciones_respuesta`, `respuesta_usuario` → mapeo 1 a 1.
+- **Eventos**: `eventos`, `evento_deportes`, `eventos_requisitos`,
+  `evento_sedes`, `eventos_fechas`, `evento_categorias`, `evento_boletos`,
+  `rutas`, `ruta_puntos`, `evento_rutas` → mapeo 1 a 1. Se descartaron del
+  diagrama columnas duplicadas/artefacto como `Column2`, `Column3`,
+  `Column12` (evidentemente residuos de ediciones en StarUML, no campos
+  reales — por ejemplo `eventos` traía dos columnas marcadas como PK).
+- `eventos.organizador_id` se dejó como entero simple, sin FK todavía,
+  porque el módulo `organizadores` (con su tabla de validación) es de una
+  fase posterior — se conectará ahí sin romper esta tabla.
+- Se creó `utils/fechas.py` porque SQLAlchemy exige objetos `datetime`, no
+  los strings ISO que manda el JSON del cliente (se detectó al probar
+  con datos reales, tanto en SQLite como aplicaría igual en Postgres).

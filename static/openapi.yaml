@@ -3,9 +3,10 @@ info:
   title: Api-SportMatch
   description: >
     API REST de SportMatch. Fase 2: autenticación, usuarios y administradores.
+    Fase 3 (en construcción): deportes, cuestionario de registro y eventos.
     Ver /docs/entidades_completas.md en el repositorio para el catálogo
-    completo de las 89 entidades del modelo (fases 3 y 4).
-  version: 0.2.0
+    completo de las 89 entidades del modelo.
+  version: 0.3.0
 servers:
   - url: http://localhost:5000
 components:
@@ -215,3 +216,372 @@ paths:
       responses:
         "201": { description: Administrador creado }
         "409": { description: Correo o nombre de usuario ya existen }
+
+  /api/deportes:
+    get:
+      summary: Listar catálogo de deportes (público; ?incluir_inactivos=1 para admin)
+      tags: [Deportes]
+      security: []
+      responses:
+        "200": { description: Lista de deportes }
+    post:
+      summary: Crear un deporte (solo admin)
+      tags: [Deportes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string, example: "Running" }
+                categoria: { type: string, example: "resistencia" }
+      responses:
+        "201": { description: Deporte creado }
+        "409": { description: Ya existe un deporte con ese nombre }
+
+  /api/deportes/{deporte_id}:
+    get:
+      summary: Obtener un deporte
+      tags: [Deportes]
+      security: []
+      parameters:
+        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deporte encontrado }
+    put:
+      summary: Actualizar un deporte (solo admin)
+      tags: [Deportes]
+      parameters:
+        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deporte actualizado }
+    delete:
+      summary: Desactivar un deporte (borrado suave, solo admin)
+      tags: [Deportes]
+      parameters:
+        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deporte desactivado }
+
+  /api/deportes/me:
+    get:
+      summary: Listar mis deportes
+      tags: [Deportes]
+      responses:
+        "200": { description: Deportes del usuario autenticado }
+    post:
+      summary: Agregar un deporte a mi perfil
+      tags: [Deportes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deporte_id]
+              properties:
+                deporte_id: { type: integer }
+                nivel: { type: string, enum: [principiante, intermedio, avanzado, profesional] }
+                es_principal: { type: boolean }
+      responses:
+        "201": { description: Deporte agregado }
+        "409": { description: Ya tienes ese deporte registrado }
+
+  /api/deportes/me/{deporte_id}:
+    put:
+      summary: Actualizar nivel / es_principal de uno de mis deportes
+      tags: [Deportes]
+      parameters:
+        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Actualizado }
+    delete:
+      summary: Quitar un deporte de mi perfil
+      tags: [Deportes]
+      parameters:
+        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Eliminado }
+
+  /api/cuestionarios:
+    get:
+      summary: Listar cuestionarios (público; ?incluir_inactivos=1 para admin)
+      tags: [Cuestionario de registro]
+      security: []
+      responses:
+        "200": { description: Lista de cuestionarios }
+    post:
+      summary: Crear un cuestionario (solo admin)
+      tags: [Cuestionario de registro]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, titulo]
+              properties:
+                codigo: { type: string, example: "registro_v1" }
+                titulo: { type: string }
+                descripcion: { type: string }
+      responses:
+        "201": { description: Cuestionario creado }
+
+  /api/cuestionarios/{codigo}:
+    get:
+      summary: Obtener un cuestionario completo (preguntas + opciones) por su código
+      tags: [Cuestionario de registro]
+      security: []
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Cuestionario con preguntas y opciones anidadas }
+
+  /api/cuestionarios/{cuestionario_id}/preguntas:
+    post:
+      summary: Agregar una pregunta a un cuestionario, opcionalmente con sus opciones (solo admin)
+      tags: [Cuestionario de registro]
+      parameters:
+        - { name: cuestionario_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, texto]
+              properties:
+                codigo: { type: string }
+                texto: { type: string }
+                tipo: { type: string, enum: [opcion_unica, opcion_multiple, texto_libre, escala] }
+                obligatoria: { type: boolean }
+                opciones:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      texto: { type: string }
+                      deporte_id: { type: integer }
+      responses:
+        "201": { description: Pregunta creada }
+
+  /api/cuestionarios/{codigo}/responder:
+    post:
+      summary: Responder un cuestionario (usuario autenticado)
+      tags: [Cuestionario de registro]
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [respuestas]
+              properties:
+                respuestas:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      pregunta_id: { type: integer }
+                      opcion_id: { type: integer, nullable: true }
+                      respuesta_texto: { type: string, nullable: true }
+      responses:
+        "201": { description: Respuestas guardadas }
+
+  /api/cuestionarios/me/respuestas:
+    get:
+      summary: Ver mis respuestas
+      tags: [Cuestionario de registro]
+      responses:
+        "200": { description: Respuestas del usuario autenticado }
+
+  /api/eventos:
+    get:
+      summary: Listar eventos (público; por defecto solo estado=publicado). Filtros - Query params - estado, tipo, deporte_id, ciudad_id, q, page, per_page
+      tags: [Eventos]
+      security: []
+      responses:
+        "200": { description: Lista paginada de eventos }
+    post:
+      summary: Crear un evento, opcionalmente con deportes/requisitos/sedes/fechas/categorías+boletos anidados (solo admin)
+      tags: [Eventos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [titulo, tipo]
+              properties:
+                titulo: { type: string }
+                tipo: { type: string, example: "carrera" }
+                dificultad: { type: string, enum: [principiante, intermedio, avanzado, elite] }
+                descripcion: { type: string }
+                deportes: { type: array, items: { type: integer } }
+                requisitos:
+                  type: array
+                  items: { type: object, properties: { descripcion: { type: string }, orden: { type: integer } } }
+                sedes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      nombre: { type: string }
+                      ciudad_id: { type: integer }
+                      latitud: { type: number }
+                      longitud: { type: number }
+                fechas:
+                  type: array
+                  items: { type: object, properties: { inicia_en: { type: string, format: date-time }, termina_en: { type: string, format: date-time } } }
+                categorias:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      nombre: { type: string }
+                      distancia_km: { type: number }
+                      cupo_total: { type: integer }
+                      boletos:
+                        type: array
+                        items: { type: object, properties: { tipo: { type: string }, precio: { type: number } } }
+      responses:
+        "201": { description: Evento creado (borrador) con todo lo anidado }
+
+  /api/eventos/{evento_id}:
+    get:
+      summary: Detalle de un evento (con deportes/requisitos/sedes/fechas/categorías/boletos)
+      tags: [Eventos]
+      security: []
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Evento }
+    put:
+      summary: Actualizar un evento, incl. cambiar `estado` (borrador/publicado/cancelado/finalizado) (solo admin)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Evento actualizado }
+    delete:
+      summary: Eliminar un evento (borrado suave, solo admin)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Evento marcado como cancelado/eliminado }
+
+  /api/eventos/slug/{slug}:
+    get:
+      summary: Detalle de un evento por su slug
+      tags: [Eventos]
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Evento }
+
+  /api/eventos/{evento_id}/categorias:
+    post:
+      summary: Agregar una categoría a un evento existente (solo admin)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "201": { description: Categoría creada }
+
+  /api/eventos/categorias/{categoria_id}/boletos:
+    post:
+      summary: Agregar un tipo de boleto a una categoría (solo admin)
+      tags: [Eventos]
+      parameters:
+        - { name: categoria_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "201": { description: Boleto creado }
+
+  /api/rutas:
+    get:
+      summary: Listar rutas públicas. Filtros - deporte_id, creador_id
+      tags: [Rutas]
+      security: []
+      responses:
+        "200": { description: Lista de rutas }
+    post:
+      summary: Crear una ruta propia, opcionalmente con sus puntos GPS (cualquier usuario autenticado)
+      tags: [Rutas]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, deporte_id]
+              properties:
+                nombre: { type: string }
+                deporte_id: { type: integer }
+                distancia_m: { type: number }
+                puntos:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      tipo: { type: string, enum: [inicio, fin, control, paso] }
+                      latitud: { type: number }
+                      longitud: { type: number }
+      responses:
+        "201": { description: Ruta creada }
+
+  /api/rutas/{ruta_id}:
+    get:
+      summary: Detalle de una ruta con sus puntos
+      tags: [Rutas]
+      security: []
+      parameters:
+        - { name: ruta_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Ruta }
+    put:
+      summary: Editar mi ruta (dueño o admin)
+      tags: [Rutas]
+      parameters:
+        - { name: ruta_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Ruta actualizada }
+        "403": { description: No tienes permisos sobre esta ruta }
+    delete:
+      summary: Eliminar mi ruta (borrado suave; dueño o admin)
+      tags: [Rutas]
+      parameters:
+        - { name: ruta_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Ruta eliminada }
+
+  /api/rutas/categorias/{categoria_id}/rutas:
+    get:
+      summary: Ver las rutas ligadas a una categoría de evento
+      tags: [Rutas]
+      security: []
+      parameters:
+        - { name: categoria_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de rutas ligadas }
+    post:
+      summary: Ligar una ruta existente a una categoría de evento (solo admin)
+      tags: [Rutas]
+      parameters:
+        - { name: categoria_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ruta_id]
+              properties:
+                ruta_id: { type: integer }
+      responses:
+        "201": { description: Ruta ligada a la categoría }
