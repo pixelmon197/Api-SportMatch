@@ -38,6 +38,38 @@ from models.evento import (
 # Fase 3 — Rutas
 from models.ruta import Ruta, RutaPunto, EventoRuta, TIPOS_PUNTO_RUTA
 
+# Fase 3 — Inscripciones y valoraciones
+from models.inscripcion import (
+    PaqueteRecuperacion,
+    Inscripcion,
+    ValoracionEvento,
+    CalendarioUsuario,
+    ESTADOS_INSCRIPCION,
+)
+
+# Fase 3 — Organizadores y validación
+from models.organizador import (
+    Organizador,
+    OrganizadorMiembro,
+    SolicitudValidacion,
+    DocumentoValidacion,
+    CuentaCobro,
+    ESTADOS_VALIDACION_ORG,
+    ESTADOS_SOLICITUD,
+    ROLES_MIEMBRO_ORG,
+)
+
+# Fase 3 — Administración y soporte
+from models.soporte import (
+    AuditoriaLog,
+    Reporte,
+    TicketSoporte,
+    TicketMensaje,
+    ESTADOS_REPORTE,
+    ESTADOS_TICKET,
+    PRIORIDADES_TICKET,
+)
+
 __all__ = [
     "Ciudad",
     "Usuario",
@@ -70,4 +102,24 @@ __all__ = [
     "RutaPunto",
     "EventoRuta",
     "TIPOS_PUNTO_RUTA",
+    "PaqueteRecuperacion",
+    "Inscripcion",
+    "ValoracionEvento",
+    "CalendarioUsuario",
+    "ESTADOS_INSCRIPCION",
+    "Organizador",
+    "OrganizadorMiembro",
+    "SolicitudValidacion",
+    "DocumentoValidacion",
+    "CuentaCobro",
+    "ESTADOS_VALIDACION_ORG",
+    "ESTADOS_SOLICITUD",
+    "ROLES_MIEMBRO_ORG",
+    "AuditoriaLog",
+    "Reporte",
+    "TicketSoporte",
+    "TicketMensaje",
+    "ESTADOS_REPORTE",
+    "ESTADOS_TICKET",
+    "PRIORIDADES_TICKET",
 ]

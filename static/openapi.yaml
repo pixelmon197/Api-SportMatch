@@ -3,10 +3,11 @@ info:
   title: Api-SportMatch
   description: >
     API REST de SportMatch. Fase 2: autenticación, usuarios y administradores.
-    Fase 3 (en construcción): deportes, cuestionario de registro y eventos.
-    Ver /docs/entidades_completas.md en el repositorio para el catálogo
-    completo de las 89 entidades del modelo.
-  version: 0.3.0
+    Fase 3 (en construcción): deportes, cuestionario de registro, eventos,
+    inscripciones y valoraciones, organizadores y validación, administración
+    y soporte. Ver /docs/entidades_completas.md en el repositorio para el
+    catálogo completo de las 89 entidades del modelo.
+  version: 0.5.0
 servers:
   - url: http://localhost:5000
 components:
@@ -585,3 +586,439 @@ paths:
                 ruta_id: { type: integer }
       responses:
         "201": { description: Ruta ligada a la categoría }
+
+  /api/eventos/{evento_id}/paquetes:
+    get:
+      summary: Listar paquetes de recuperación de un evento (público; ?incluir_inactivos=1 para admin)
+      tags: [Inscripciones y valoraciones]
+      security: []
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de paquetes }
+    post:
+      summary: Crear un paquete de recuperación para un evento (solo admin)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string, example: "Kit básico" }
+                nivel: { type: string }
+                precio: { type: number }
+      responses:
+        "201": { description: Paquete creado }
+
+  /api/inscripciones:
+    post:
+      summary: Inscribirme a una categoría de un evento (usuario autenticado)
+      description: >
+        El estado queda en "pendiente" (todavía no existe el módulo de pagos);
+        si la categoría llegó a su cupo, cae en "lista_espera" cuando la
+        categoría lo permite, o se rechaza con 409 si no.
+      tags: [Inscripciones y valoraciones]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [evento_id, fecha_id, categoria_id, boleto_id]
+              properties:
+                evento_id: { type: integer }
+                fecha_id: { type: integer }
+                categoria_id: { type: integer }
+                boleto_id: { type: integer }
+                paquete_id: { type: integer, nullable: true }
+      responses:
+        "201": { description: Inscripción creada }
+        "409": { description: Ya inscrito en esa categoría, o cupo lleno sin lista de espera }
+
+  /api/inscripciones/me:
+    get:
+      summary: Ver mis inscripciones (filtro opcional ?estado=)
+      tags: [Inscripciones y valoraciones]
+      responses:
+        "200": { description: Lista de inscripciones del usuario autenticado }
+
+  /api/inscripciones/{inscripcion_id}:
+    get:
+      summary: Detalle de una inscripción (dueño o admin)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Inscripción }
+        "403": { description: No tienes acceso a esta inscripción }
+
+  /api/inscripciones/{inscripcion_id}/cancelar:
+    put:
+      summary: Cancelar una inscripción (dueño o admin). Si había lista de espera, sube al siguiente.
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Inscripción cancelada }
+
+  /api/inscripciones/{inscripcion_id}/estado:
+    put:
+      summary: Cambiar el estado de una inscripción a mano (solo admin, mientras no exista el módulo de pagos)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado: { type: string, enum: [pendiente, confirmada, lista_espera, cancelada, completada] }
+      responses:
+        "200": { description: Estado actualizado }
+
+  /api/inscripciones/{inscripcion_id}/resultado:
+    put:
+      summary: Registrar asistencia y resultado el día del evento (solo admin)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                asistio: { type: boolean }
+                asistencia_latitud: { type: number }
+                asistencia_longitud: { type: number }
+                tiempo_oficial: { type: string, example: "00:28:15" }
+                posicion_general: { type: integer }
+                posicion_categoria: { type: integer }
+                numero_participante: { type: string }
+                completada: { type: boolean }
+      responses:
+        "200": { description: Inscripción actualizada }
+
+  /api/eventos/{evento_id}/inscripciones:
+    get:
+      summary: Ver quién se inscribió a un evento (solo admin). Filtros - categoria_id, estado
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de inscripciones del evento }
+
+  /api/inscripciones/{inscripcion_id}/valoracion:
+    post:
+      summary: Valorar el evento tras asistir (solo si la inscripción está "completada"; usuario dueño)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [calificacion_evento]
+              properties:
+                calificacion_evento: { type: integer, minimum: 1, maximum: 5 }
+                calificacion_organizador: { type: integer, minimum: 1, maximum: 5 }
+                comentario: { type: string }
+      responses:
+        "201": { description: Valoración guardada (crea o actualiza) }
+        "400": { description: La inscripción todavía no está "completada" }
+
+  /api/eventos/{evento_id}/valoraciones:
+    get:
+      summary: Ver las valoraciones públicas de un evento
+      tags: [Inscripciones y valoraciones]
+      security: []
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de valoraciones }
+
+  /api/valoraciones/{valoracion_id}/responder:
+    put:
+      summary: Responder públicamente a una valoración (organizador; por ahora, admin)
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: valoracion_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [respuesta_organizador]
+              properties:
+                respuesta_organizador: { type: string }
+      responses:
+        "200": { description: Respuesta guardada }
+
+  /api/usuarios/me/calendario:
+    get:
+      summary: Ver las fechas de eventos que guardé en mi calendario
+      tags: [Inscripciones y valoraciones]
+      responses:
+        "200": { description: Lista de fechas guardadas }
+    post:
+      summary: Agregar una fecha de evento a mi calendario
+      tags: [Inscripciones y valoraciones]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fecha_id]
+              properties:
+                fecha_id: { type: integer }
+      responses:
+        "201": { description: Agregado al calendario }
+
+  /api/usuarios/me/calendario/{fecha_id}:
+    delete:
+      summary: Quitar una fecha de mi calendario
+      tags: [Inscripciones y valoraciones]
+      parameters:
+        - { name: fecha_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Eliminado }
+
+  /api/organizadores:
+    get:
+      summary: Listar organizadores (público; solo aprobados. ?estado_validacion= para admin)
+      tags: [Organizadores]
+      security: []
+      responses:
+        "200": { description: Lista de organizadores }
+    post:
+      summary: Crear mi perfil de organizador (autenticado; uno por usuario, queda "pendiente")
+      tags: [Organizadores]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_comercial]
+              properties:
+                nombre_comercial: { type: string }
+                descripcion: { type: string }
+                correo_contacto: { type: string }
+                telefono_contacto: { type: string }
+                ciudad_id: { type: integer }
+      responses:
+        "201": { description: Organizador creado }
+        "409": { description: Ya tienes un perfil de organizador }
+
+  /api/organizadores/{organizador_id}:
+    get:
+      summary: Detalle de un organizador
+      tags: [Organizadores]
+      security: []
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Organizador }
+    put:
+      summary: Editar mi organizador (miembro propietario/administrador, o admin)
+      tags: [Organizadores]
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Organizador actualizado }
+
+  /api/organizadores/{organizador_id}/miembros:
+    post:
+      summary: Agregar un miembro al equipo del organizador
+      tags: [Organizadores]
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuario_id]
+              properties:
+                usuario_id: { type: integer }
+                rol: { type: string, enum: [propietario, administrador, editor] }
+      responses:
+        "201": { description: Miembro agregado }
+
+  /api/organizadores/{organizador_id}/solicitudes:
+    post:
+      summary: Enviar el organizador a revisión, opcionalmente con documentos anexos
+      tags: [Organizadores]
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                documentos:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      tipo_documento: { type: string, example: "ine" }
+                      numero_documento: { type: string }
+      responses:
+        "201": { description: Solicitud enviada (organizador pasa a "en_revision") }
+        "409": { description: Ya hay una solicitud pendiente }
+
+  /api/organizadores/solicitudes:
+    get:
+      summary: Bandeja de solicitudes de validación (solo admin; ?estado=pendiente por defecto)
+      tags: [Organizadores]
+      responses:
+        "200": { description: Lista de solicitudes }
+
+  /api/organizadores/solicitudes/{solicitud_id}/revisar:
+    put:
+      summary: Aprobar o rechazar una solicitud de validación (solo admin)
+      tags: [Organizadores]
+      parameters:
+        - { name: solicitud_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [aprobar, rechazar] }
+                comentarios: { type: string }
+                motivo_rechazo: { type: string }
+      responses:
+        "200": { description: Organizador y solicitud actualizados }
+
+  /api/reportes:
+    post:
+      summary: Reportar contenido o a un usuario (tipo_entidad/entidad_id son genéricos)
+      tags: [Administración y soporte]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo_entidad, entidad_id, motivo]
+              properties:
+                tipo_entidad: { type: string, example: "evento" }
+                entidad_id: { type: integer }
+                motivo: { type: string }
+                descripcion: { type: string }
+      responses:
+        "201": { description: Reporte creado }
+    get:
+      summary: Bandeja de moderación (solo admin; ?estado=pendiente por defecto)
+      tags: [Administración y soporte]
+      responses:
+        "200": { description: Lista de reportes }
+
+  /api/reportes/{reporte_id}:
+    put:
+      summary: Moderar un reporte (solo admin) — se registra en la bitácora de auditoría
+      tags: [Administración y soporte]
+      parameters:
+        - { name: reporte_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estado: { type: string, enum: [pendiente, en_revision, resuelto, desestimado] }
+                accion_tomada: { type: string }
+                notas_moderador: { type: string }
+      responses:
+        "200": { description: Reporte actualizado }
+
+  /api/tickets:
+    post:
+      summary: Abrir un ticket de soporte con el mensaje inicial
+      tags: [Administración y soporte]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asunto, mensaje]
+              properties:
+                asunto: { type: string }
+                mensaje: { type: string }
+                categoria: { type: string }
+                prioridad: { type: string, enum: [baja, media, alta, urgente] }
+      responses:
+        "201": { description: Ticket creado }
+    get:
+      summary: Bandeja de soporte (solo admin; filtros estado, prioridad, asignado_a)
+      tags: [Administración y soporte]
+      responses:
+        "200": { description: Lista de tickets }
+
+  /api/tickets/{ticket_id}:
+    get:
+      summary: Detalle de un ticket con sus mensajes (dueño no ve mensajes internos)
+      tags: [Administración y soporte]
+      parameters:
+        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Ticket con mensajes }
+    put:
+      summary: Asignar, priorizar o cerrar un ticket (solo admin)
+      tags: [Administración y soporte]
+      parameters:
+        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Ticket actualizado }
+
+  /api/tickets/{ticket_id}/mensajes:
+    post:
+      summary: Agregar un mensaje al ticket (dueño o admin; solo admin puede marcarlo es_interno)
+      tags: [Administración y soporte]
+      parameters:
+        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mensaje]
+              properties:
+                mensaje: { type: string }
+                es_interno: { type: boolean }
+      responses:
+        "201": { description: Mensaje agregado }
+
+  /api/admin/auditoria:
+    get:
+      summary: Bitácora de auditoría de solo lectura (solo admin)
+      tags: [Administración y soporte]
+      parameters:
+        - { name: tipo_entidad, in: query, schema: { type: string } }
+        - { name: entidad_id, in: query, schema: { type: integer } }
+        - { name: usuario_id, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Lista paginada de registros de auditoría }

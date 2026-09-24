@@ -96,3 +96,60 @@ Módulos ya implementados (con CRUD probado end-to-end):
 - Se creó `utils/fechas.py` porque SQLAlchemy exige objetos `datetime`, no
   los strings ISO que manda el JSON del cliente (se detectó al probar
   con datos reales, tanto en SQLite como aplicaría igual en Postgres).
+
+## 6. Actualización — Inscripciones y valoraciones
+
+Módulo implementado (con CRUD y reglas de negocio probadas end-to-end:
+cupo, lista de espera, promoción automática al cancelar, resultado del
+evento, valoración condicionada a asistencia, calendario personal):
+
+- `inscripciones` → `Inscripcion`. `numero_particpante` (typo del diagrama)
+  se guarda como `numero_participante`, mismo criterio que
+  `contrasena_hash` en Fase 2.
+- `valoraciones_evento` → `ValoracionEvento`. El diagrama la modela como
+  `inscripciones 1 -- 0..*`, pero a nivel de aplicación se limita a una
+  valoración por inscripción (si ya existe, se actualiza en vez de
+  duplicarse) — así evitamos reseñas repetidas del mismo usuario sobre el
+  mismo evento.
+- `paquete_recuperacion` → `PaqueteRecuperacion`. Se dejó fuera
+  `paquete_items`, porque liga a `variante_id` (una variante de producto
+  de la tienda), y el módulo de tienda todavía no existe.
+- `calendario_usuario` → `CalendarioUsuario`. El diagrama marca la relación
+  como `usuarios 1 -- 1`, pero eso no tiene sentido para un calendario (un
+  usuario guarda varias fechas); se implementó como `1 -- N` con llave
+  compuesta (`usuario_id`, `fecha_id`).
+- `inscripciones.pago_id` no existe todavía como columna: el módulo de
+  pagos (`pagos`, `pagos_inscripciones`, `cupones`, `liquidaciones`) es
+  bastante más grande (pasarelas de pago, comisiones, reembolsos) y queda
+  para una fase dedicada. Mientras tanto, el estado de una inscripción se
+  mueve a mano con `PUT /api/inscripciones/<id>/estado`.
+
+## 7. Actualización — Organizadores y validación, Administración y soporte
+
+Módulos implementados y probados end-to-end (registro de organizador →
+bloqueo de creación de eventos hasta aprobación → solicitud con documentos
+→ revisión admin → creación de evento ligado al organizador → verificación
+de que un tercero no puede tocar ese evento → reporte de moderación →
+ticket de soporte con nota interna oculta al usuario → bitácora de
+auditoría):
+
+- `organizadores`, `organizador_miembros`, `solicitudes_validacion`,
+  `documentos_validacion`, `cuentas_cobro` → mapeo 1 a 1 con el diagrama.
+- **`eventos.organizador_id` ahora es una llave foránea real** hacia
+  `organizadores.id` (antes era un entero simple, como se dejó anotado en
+  la Fase 3 parte 1). Todo `routes/eventos.py`, y los endpoints de
+  paquetes/inscripciones/valoraciones que tocan un evento, se movieron de
+  "solo admin" a "admin o miembro (propietario/administrador) del
+  organizador dueño del evento" vía `utils.auth.puede_gestionar_evento`.
+- `auditoria_log`, `reportes`, `tickets_soporte` → mapeo 1 a 1.
+- `ticket_mensaje` traía en el diagrama columnas duplicadas de
+  `tickets_soporte` (categoria, prioridad, estado, asunto, creado_en,
+  cerrado_en) — claro artefacto de StarUML (copy-paste al crear la
+  entidad); se modelaron solo los campos propios: `ticket_id`, `autor_id`,
+  `mensaje`, `es_interno`, `creado_en`.
+- La auditoría (`utils/auditoria.py: registrar_auditoria`) no se dispara en
+  cada request; se llamó explícitamente en las acciones administrativas
+  sensibles ya existentes: cambiar rol/estado de un usuario (Fase 2),
+  revisar una solicitud de validación, y cambiar el estado de un reporte.
+- Se descartó `paquete_items` de nuevo en este contexto: pertenece al
+  módulo de tienda (liga a `variante_id`), que sigue pendiente.

@@ -2,8 +2,8 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from database import db
-from models import Ruta, RutaPunto, EventoRuta, EventoCategoria, Deporte, TIPOS_PUNTO_RUTA
-from utils.auth import get_usuario_actual
+from models import Ruta, RutaPunto, EventoRuta, EventoCategoria, Evento, Deporte, TIPOS_PUNTO_RUTA
+from utils.auth import get_usuario_actual, puede_gestionar_evento
 
 rutas_bp = Blueprint("rutas", __name__, url_prefix="/api/rutas")
 
@@ -155,16 +155,17 @@ def eliminar_punto(punto_id):
     return "", 204
 
 
-# ============ LIGAR UNA RUTA A UNA CATEGORÍA DE EVENTO (solo admin) ============
+# ============ LIGAR UNA RUTA A UNA CATEGORÍA DE EVENTO (admin u organizador del evento) ============
 
 @rutas_bp.route("/categorias/<int:categoria_id>/rutas", methods=["POST"])
 @jwt_required()
 def ligar_ruta_a_categoria(categoria_id):
     usuario = get_usuario_actual()
-    if usuario.rol != "admin":
-        return jsonify({"error": "Solo un administrador puede ligar rutas a un evento"}), 403
+    categoria = EventoCategoria.query.get_or_404(categoria_id)
+    evento = Evento.query.get(categoria.evento_id)
+    if not puede_gestionar_evento(usuario, evento):
+        return jsonify({"error": "No tienes permisos para gestionar este evento"}), 403
 
-    EventoCategoria.query.get_or_404(categoria_id)
     data = request.get_json(force=True, silent=True) or {}
     ruta_id = data.get("ruta_id")
     if not ruta_id or not Ruta.query.get(ruta_id):
@@ -187,10 +188,12 @@ def rutas_de_categoria(categoria_id):
 @jwt_required()
 def desligar_ruta(evento_ruta_id):
     usuario = get_usuario_actual()
-    if usuario.rol != "admin":
-        return jsonify({"error": "Solo un administrador puede desligar rutas de un evento"}), 403
-
     evento_ruta = EventoRuta.query.get_or_404(evento_ruta_id)
+    categoria = EventoCategoria.query.get(evento_ruta.categoria_id)
+    evento = Evento.query.get(categoria.evento_id) if categoria else None
+    if not puede_gestionar_evento(usuario, evento):
+        return jsonify({"error": "No tienes permisos para gestionar este evento"}), 403
+
     db.session.delete(evento_ruta)
     db.session.commit()
     return "", 204

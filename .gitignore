@@ -15,7 +15,7 @@ htmlcov/
 # Variables de entorno (nunca subir secretos)
 .env
 .env.*
-.env.example
+!.env.example
 
 # Instancia de Flask
 instance/

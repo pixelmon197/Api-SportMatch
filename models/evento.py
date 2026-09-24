@@ -10,17 +10,12 @@ TIPOS_BOLETO = ("general", "early_bird", "vip", "grupal")
 
 
 class Evento(db.Model):
-    """Tabla `eventos`.
-
-    `organizador_id` se deja como entero simple (sin FK todavía): el módulo
-    `organizadores` es de una fase posterior. Cuando se construya, se
-    agrega la llave foránea sin romper esta tabla.
-    """
+    """Tabla `eventos`."""
 
     __tablename__ = "eventos"
 
     id = db.Column(db.Integer, primary_key=True)
-    organizador_id = db.Column(db.Integer, nullable=True)
+    organizador_id = db.Column(db.Integer, db.ForeignKey("organizadores.id"), nullable=True)
     tipo = db.Column(db.String(50), nullable=False)  # carrera, torneo, clinica, etc.
     estado = db.Column(db.String(20), nullable=False, default="borrador")
     dificultad = db.Column(db.String(20), nullable=True)
@@ -42,8 +37,9 @@ class Evento(db.Model):
         "EventoRequisito", order_by="EventoRequisito.orden", cascade="all, delete-orphan"
     )
     sedes = db.relationship("EventoSede", cascade="all, delete-orphan")
-    fechas = db.relationship("EventoFecha", cascade="all, delete-orphan")
+    fechas = db.relationship("EventoFecha", back_populates="evento", cascade="all, delete-orphan")
     categorias = db.relationship("EventoCategoria", cascade="all, delete-orphan")
+    organizador = db.relationship("Organizador")
 
     def to_dict(self, detalle=False):
         data = {
@@ -126,6 +122,8 @@ class EventoFecha(db.Model):
     inicia_en = db.Column(db.DateTime, nullable=False)
     termina_en = db.Column(db.DateTime, nullable=True)
     cancelada_en = db.Column(db.DateTime, nullable=True)
+
+    evento = db.relationship("Evento", back_populates="fechas")
 
     def to_dict(self):
         return {

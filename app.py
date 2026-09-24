@@ -12,6 +12,9 @@ from routes.deportes import deportes_bp
 from routes.cuestionarios import cuestionarios_bp
 from routes.eventos import eventos_bp
 from routes.rutas import rutas_bp
+from routes.inscripciones import inscripciones_bp
+from routes.organizadores import organizadores_bp
+from routes.soporte import soporte_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -32,6 +35,9 @@ def create_app(config_class=Config):
     app.register_blueprint(cuestionarios_bp)
     app.register_blueprint(eventos_bp)
     app.register_blueprint(rutas_bp)
+    app.register_blueprint(inscripciones_bp)
+    app.register_blueprint(organizadores_bp)
+    app.register_blueprint(soporte_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,

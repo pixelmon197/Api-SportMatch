@@ -6,6 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db
 from models import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA
 from utils.auth import admin_required, get_usuario_actual
+from utils.auditoria import registrar_auditoria
 
 usuarios_bp = Blueprint("usuarios", __name__, url_prefix="/api/usuarios")
 
@@ -102,8 +103,19 @@ def cambiar_rol(usuario_id):
     if nuevo_rol not in ROLES_VALIDOS:
         return jsonify({"error": f"rol debe ser uno de: {', '.join(ROLES_VALIDOS)}"}), 400
 
+    rol_anterior = usuario.rol
     usuario.rol = nuevo_rol
     db.session.commit()
+
+    if rol_anterior != nuevo_rol:
+        registrar_auditoria(
+            usuario_id=get_jwt_identity(),
+            accion="usuario.cambiar_rol",
+            tipo_entidad="usuario",
+            entidad_id=usuario.id,
+            antes={"rol": rol_anterior},
+            despues={"rol": nuevo_rol},
+        )
     return jsonify(usuario.to_dict()), 200
 
 
@@ -118,10 +130,21 @@ def cambiar_estado(usuario_id):
     if nuevo_estado not in ESTADOS_CUENTA:
         return jsonify({"error": f"estado_cuenta debe ser uno de: {', '.join(ESTADOS_CUENTA)}"}), 400
 
+    estado_anterior = usuario.estado_cuenta
     usuario.estado_cuenta = nuevo_estado
     if nuevo_estado == "eliminada":
         usuario.eliminado_en = datetime.now(timezone.utc)
     db.session.commit()
+
+    if estado_anterior != nuevo_estado:
+        registrar_auditoria(
+            usuario_id=get_jwt_identity(),
+            accion="usuario.cambiar_estado",
+            tipo_entidad="usuario",
+            entidad_id=usuario.id,
+            antes={"estado_cuenta": estado_anterior},
+            despues={"estado_cuenta": nuevo_estado},
+        )
     return jsonify(usuario.to_dict()), 200
 
 

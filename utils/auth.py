@@ -42,3 +42,30 @@ def get_usuario_actual():
     """Regresa el objeto Usuario autenticado a partir del JWT (o None)."""
     verify_jwt_in_request()
     return Usuario.query.get(int(get_jwt_identity()))
+
+
+def es_miembro_organizador(usuario, organizador_id, roles_permitidos=("propietario", "administrador")):
+    """¿El usuario pertenece al equipo de ese organizador, con rol suficiente?"""
+    from models import OrganizadorMiembro  # import local: evita ciclo de imports
+
+    if organizador_id is None:
+        return False
+    miembro = OrganizadorMiembro.query.get((organizador_id, usuario.id))
+    return miembro is not None and miembro.rol in roles_permitidos
+
+
+def puede_gestionar_organizador(usuario, organizador_id):
+    """Admin, o miembro (propietario/administrador) de ese organizador."""
+    if usuario.rol == "admin":
+        return True
+    return es_miembro_organizador(usuario, organizador_id)
+
+
+def puede_gestionar_evento(usuario, evento):
+    """Admin, o miembro del organizador dueño del evento. Un evento sin
+    organizador_id (creado directo por la plataforma) solo lo gestiona admin."""
+    if usuario.rol == "admin":
+        return True
+    if evento.organizador_id is None:
+        return False
+    return es_miembro_organizador(usuario, evento.organizador_id)

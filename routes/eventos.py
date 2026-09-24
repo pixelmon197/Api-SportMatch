@@ -1,8 +1,10 @@
 import re
 import unicodedata
+from functools import wraps
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
+from flask_jwt_extended import jwt_required
 
 from database import db
 from models import (
@@ -14,12 +16,13 @@ from models import (
     EventoCategoria,
     EventoBoleto,
     Deporte,
+    Organizador,
     ESTADOS_EVENTO,
     DIFICULTADES_EVENTO,
     TIPOS_SEDE,
     TIPOS_BOLETO,
 )
-from utils.auth import admin_required
+from utils.auth import get_usuario_actual, puede_gestionar_evento, puede_gestionar_organizador
 from utils.fechas import parse_datetime
 
 eventos_bp = Blueprint("eventos", __name__, url_prefix="/api/eventos")
@@ -41,11 +44,68 @@ def _generar_slug_unico(titulo):
     return slug
 
 
+def evento_gestion_required(resolver):
+    """Requiere JWT y que el usuario pueda gestionar el evento que resuelve
+    `resolver(kwargs)` (admin, o miembro del organizador dueño del evento).
+    Deja el evento ya cargado en `g.evento` para que la vista lo reuse.
+    """
+
+    def decorador(fn):
+        @wraps(fn)
+        @jwt_required()
+        def wrapper(*args, **kwargs):
+            usuario = get_usuario_actual()
+            evento = resolver(kwargs)
+            if evento is None:
+                return jsonify({"error": "No encontrado"}), 404
+            if not puede_gestionar_evento(usuario, evento):
+                return jsonify({"error": "No tienes permisos para gestionar este evento"}), 403
+            g.evento = evento
+            g.usuario_actual = usuario
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return decorador
+
+
+def _evento_por_id(kw):
+    return Evento.query.get(kw["evento_id"])
+
+
+def _evento_de_requisito(kw):
+    r = EventoRequisito.query.get(kw["requisito_id"])
+    return Evento.query.get(r.evento_id) if r else None
+
+
+def _evento_de_sede(kw):
+    s = EventoSede.query.get(kw["sede_id"])
+    return Evento.query.get(s.evento_id) if s else None
+
+
+def _evento_de_fecha(kw):
+    f = EventoFecha.query.get(kw["fecha_id"])
+    return Evento.query.get(f.evento_id) if f else None
+
+
+def _evento_de_categoria(kw):
+    c = EventoCategoria.query.get(kw["categoria_id"])
+    return Evento.query.get(c.evento_id) if c else None
+
+
+def _evento_de_boleto(kw):
+    b = EventoBoleto.query.get(kw["boleto_id"])
+    if not b:
+        return None
+    c = EventoCategoria.query.get(b.categoria_id)
+    return Evento.query.get(c.evento_id) if c else None
+
+
 # ============ CONSULTA (público) ============
 
 @eventos_bp.route("", methods=["GET"])
 def listar_eventos():
-    """Filtros: estado, tipo, deporte_id, ciudad_id, q (busca en título). Paginado."""
+    """Filtros: estado, tipo, deporte_id, ciudad_id, organizador_id, q (busca en título). Paginado."""
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
 
@@ -58,6 +118,8 @@ def listar_eventos():
         query = query.filter_by(tipo=tipo)
     if q := request.args.get("q"):
         query = query.filter(Evento.titulo.ilike(f"%{q}%"))
+    if organizador_id := request.args.get("organizador_id", type=int):
+        query = query.filter_by(organizador_id=organizador_id)
     if deporte_id := request.args.get("deporte_id", type=int):
         query = query.join(EventoDeporte).filter(EventoDeporte.deporte_id == deporte_id)
     if ciudad_id := request.args.get("ciudad_id", type=int):
@@ -87,11 +149,12 @@ def obtener_evento_por_slug(slug):
     return jsonify(evento.to_dict(detalle=True)), 200
 
 
-# ============ CREAR / EDITAR (solo admin por ahora; el módulo "organizadores"
-# aún no existe, se conectará en una fase posterior) ============
+# ============ CREAR / EDITAR ============
+# Un admin siempre puede. Un usuario normal puede si es miembro
+# (propietario/administrador) de un organizador ya "aprobado".
 
 @eventos_bp.route("", methods=["POST"])
-@admin_required
+@jwt_required()
 def crear_evento():
     """Crea el evento y, opcionalmente, sus sub-recursos en un solo request:
     deportes: [deporte_id, ...]
@@ -100,16 +163,30 @@ def crear_evento():
     fechas: [{inicia_en, termina_en}]
     categorias: [{nombre, distancia_km, cupo_total, ..., boletos: [{tipo, precio, ...}]}]
     """
+    usuario = get_usuario_actual()
     data = request.get_json(force=True, silent=True) or {}
     titulo = data.get("titulo")
     tipo = data.get("tipo")
+    organizador_id = data.get("organizador_id")
+
     if not titulo or not tipo:
         return jsonify({"error": "titulo y tipo son obligatorios"}), 400
     if data.get("dificultad") and data["dificultad"] not in DIFICULTADES_EVENTO:
         return jsonify({"error": f"dificultad debe ser una de: {', '.join(DIFICULTADES_EVENTO)}"}), 400
 
+    if usuario.rol != "admin":
+        if not organizador_id:
+            return jsonify({"error": "organizador_id es obligatorio para crear un evento"}), 400
+        organizador = Organizador.query.get(organizador_id)
+        if not organizador or not puede_gestionar_organizador(usuario, organizador_id):
+            return jsonify({"error": "No perteneces a ese organizador"}), 403
+        if organizador.estado_validacion != "aprobado":
+            return jsonify({"error": "Ese organizador todavía no está aprobado para publicar eventos"}), 403
+    elif organizador_id and not Organizador.query.get(organizador_id):
+        return jsonify({"error": "organizador_id inválido"}), 400
+
     evento = Evento(
-        organizador_id=data.get("organizador_id"),
+        organizador_id=organizador_id,
         tipo=tipo,
         dificultad=data.get("dificultad"),
         titulo=titulo,
@@ -182,9 +259,9 @@ def crear_evento():
 
 
 @eventos_bp.route("/<int:evento_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def actualizar_evento(evento_id):
-    evento = Evento.query.get_or_404(evento_id)
+    evento = g.evento
     data = request.get_json(force=True, silent=True) or {}
 
     if "estado" in data:
@@ -202,22 +279,21 @@ def actualizar_evento(evento_id):
 
 
 @eventos_bp.route("/<int:evento_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def eliminar_evento(evento_id):
     """Borrado suave: hay inscripciones/pagos que dependerán de este evento."""
-    evento = Evento.query.get_or_404(evento_id)
+    evento = g.evento
     evento.eliminado_en = datetime.now(timezone.utc)
     evento.estado = "cancelado"
     db.session.commit()
     return jsonify(evento.to_dict()), 200
 
 
-# ============ SUB-RECURSOS (edición fina, solo admin) ============
+# ============ SUB-RECURSOS (edición fina: admin o miembro del organizador dueño) ============
 
 @eventos_bp.route("/<int:evento_id>/deportes", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def agregar_deporte_evento(evento_id):
-    Evento.query.get_or_404(evento_id)
     data = request.get_json(force=True, silent=True) or {}
     deporte_id = data.get("deporte_id")
     if not deporte_id or not Deporte.query.get(deporte_id):
@@ -229,7 +305,7 @@ def agregar_deporte_evento(evento_id):
 
 
 @eventos_bp.route("/<int:evento_id>/deportes/<int:deporte_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def quitar_deporte_evento(evento_id, deporte_id):
     ed = EventoDeporte.query.filter_by(evento_id=evento_id, deporte_id=deporte_id).first_or_404()
     db.session.delete(ed)
@@ -238,9 +314,8 @@ def quitar_deporte_evento(evento_id, deporte_id):
 
 
 @eventos_bp.route("/<int:evento_id>/requisitos", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def agregar_requisito(evento_id):
-    Evento.query.get_or_404(evento_id)
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("descripcion"):
         return jsonify({"error": "descripcion es obligatoria"}), 400
@@ -251,7 +326,7 @@ def agregar_requisito(evento_id):
 
 
 @eventos_bp.route("/requisitos/<int:requisito_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_de_requisito)
 def actualizar_requisito(requisito_id):
     req = EventoRequisito.query.get_or_404(requisito_id)
     data = request.get_json(force=True, silent=True) or {}
@@ -263,7 +338,7 @@ def actualizar_requisito(requisito_id):
 
 
 @eventos_bp.route("/requisitos/<int:requisito_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_de_requisito)
 def eliminar_requisito(requisito_id):
     req = EventoRequisito.query.get_or_404(requisito_id)
     db.session.delete(req)
@@ -272,9 +347,8 @@ def eliminar_requisito(requisito_id):
 
 
 @eventos_bp.route("/<int:evento_id>/sedes", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def agregar_sede(evento_id):
-    Evento.query.get_or_404(evento_id)
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("nombre"):
         return jsonify({"error": "nombre es obligatorio"}), 400
@@ -296,7 +370,7 @@ def agregar_sede(evento_id):
 
 
 @eventos_bp.route("/sedes/<int:sede_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_de_sede)
 def actualizar_sede(sede_id):
     sede = EventoSede.query.get_or_404(sede_id)
     data = request.get_json(force=True, silent=True) or {}
@@ -308,7 +382,7 @@ def actualizar_sede(sede_id):
 
 
 @eventos_bp.route("/sedes/<int:sede_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_de_sede)
 def eliminar_sede(sede_id):
     sede = EventoSede.query.get_or_404(sede_id)
     db.session.delete(sede)
@@ -317,9 +391,8 @@ def eliminar_sede(sede_id):
 
 
 @eventos_bp.route("/<int:evento_id>/fechas", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def agregar_fecha(evento_id):
-    Evento.query.get_or_404(evento_id)
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("inicia_en"):
         return jsonify({"error": "inicia_en es obligatorio"}), 400
@@ -334,7 +407,7 @@ def agregar_fecha(evento_id):
 
 
 @eventos_bp.route("/fechas/<int:fecha_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_de_fecha)
 def actualizar_fecha(fecha_id):
     fecha = EventoFecha.query.get_or_404(fecha_id)
     data = request.get_json(force=True, silent=True) or {}
@@ -346,7 +419,7 @@ def actualizar_fecha(fecha_id):
 
 
 @eventos_bp.route("/fechas/<int:fecha_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_de_fecha)
 def eliminar_fecha(fecha_id):
     fecha = EventoFecha.query.get_or_404(fecha_id)
     db.session.delete(fecha)
@@ -355,9 +428,8 @@ def eliminar_fecha(fecha_id):
 
 
 @eventos_bp.route("/<int:evento_id>/categorias", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_por_id)
 def agregar_categoria(evento_id):
-    Evento.query.get_or_404(evento_id)
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("nombre"):
         return jsonify({"error": "nombre es obligatorio"}), 400
@@ -377,7 +449,7 @@ def agregar_categoria(evento_id):
 
 
 @eventos_bp.route("/categorias/<int:categoria_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_de_categoria)
 def actualizar_categoria(categoria_id):
     categoria = EventoCategoria.query.get_or_404(categoria_id)
     data = request.get_json(force=True, silent=True) or {}
@@ -391,7 +463,7 @@ def actualizar_categoria(categoria_id):
 
 
 @eventos_bp.route("/categorias/<int:categoria_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_de_categoria)
 def eliminar_categoria(categoria_id):
     categoria = EventoCategoria.query.get_or_404(categoria_id)
     db.session.delete(categoria)
@@ -400,9 +472,8 @@ def eliminar_categoria(categoria_id):
 
 
 @eventos_bp.route("/categorias/<int:categoria_id>/boletos", methods=["POST"])
-@admin_required
+@evento_gestion_required(_evento_de_categoria)
 def agregar_boleto(categoria_id):
-    EventoCategoria.query.get_or_404(categoria_id)
     data = request.get_json(force=True, silent=True) or {}
     if data.get("tipo") and data["tipo"] not in TIPOS_BOLETO:
         return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_BOLETO)}"}), 400
@@ -422,7 +493,7 @@ def agregar_boleto(categoria_id):
 
 
 @eventos_bp.route("/boletos/<int:boleto_id>", methods=["PUT"])
-@admin_required
+@evento_gestion_required(_evento_de_boleto)
 def actualizar_boleto(boleto_id):
     boleto = EventoBoleto.query.get_or_404(boleto_id)
     data = request.get_json(force=True, silent=True) or {}
@@ -437,7 +508,7 @@ def actualizar_boleto(boleto_id):
 
 
 @eventos_bp.route("/boletos/<int:boleto_id>", methods=["DELETE"])
-@admin_required
+@evento_gestion_required(_evento_de_boleto)
 def eliminar_boleto(boleto_id):
     boleto = EventoBoleto.query.get_or_404(boleto_id)
     db.session.delete(boleto)
