@@ -3,7 +3,7 @@
 # (89 entidades en total; se irán incorporando por fases).
 
 from models.ciudad import Ciudad
-from models.usuario import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA
+from models.usuario import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from models.token_verificacion import TokenVerificacion, TIPOS_TOKEN
 from models.dispositivo import Dispositivo
 from models.aceptacion_legal import AceptacionLegal
@@ -75,6 +75,7 @@ __all__ = [
     "Usuario",
     "ROLES_VALIDOS",
     "ESTADOS_CUENTA",
+    "SEXOS_VALIDOS",
     "TokenVerificacion",
     "TIPOS_TOKEN",
     "Dispositivo",

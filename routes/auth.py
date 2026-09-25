@@ -4,8 +4,9 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
 from database import db
-from models import Usuario, ROLES_VALIDOS
+from models import Usuario, ROLES_VALIDOS, SEXOS_VALIDOS, TokenVerificacion
 from utils.auth import get_usuario_actual
+from utils.fechas import parse_date
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -18,10 +19,16 @@ def register():
     data = request.get_json(force=True, silent=True) or {}
 
     nombre_completo = data.get("nombre_completo")
-    nombre_usuario = data.get("nombre_usuario")
+    nombre_usuario = (data.get("nombre_usuario") or "").strip().lower() or None
     correo = data.get("correo")
     password = data.get("password")
+    fecha_nacimiento_raw = data.get("fecha_nacimiento")
+    sexo = data.get("sexo")
 
+    # La tabla `usuarios` en Neon exige (CHECK usuarios_check) que si
+    # `registro_completo_en` no es nulo -> correo, fecha_nacimiento y sexo
+    # tampoco lo sean. Como este registro marca `registro_completo_en` de
+    # una vez, estos tres campos pasan a ser obligatorios aquí también.
     faltantes = [
         campo
         for campo, valor in {
@@ -29,6 +36,8 @@ def register():
             "nombre_usuario": nombre_usuario,
             "correo": correo,
             "password": password,
+            "fecha_nacimiento": fecha_nacimiento_raw,
+            "sexo": sexo,
         }.items()
         if not valor
     ]
@@ -36,6 +45,19 @@ def register():
         return jsonify(
             {"error": f"Campos requeridos faltantes: {', '.join(faltantes)}"}
         ), 400
+
+    if len(nombre_usuario) > 30:
+        return jsonify({"error": "nombre_usuario no puede tener más de 30 caracteres"}), 400
+
+    if sexo not in SEXOS_VALIDOS:
+        return jsonify(
+            {"error": f"sexo debe ser uno de: {', '.join(SEXOS_VALIDOS)}"}
+        ), 400
+
+    try:
+        fecha_nacimiento = parse_date(fecha_nacimiento_raw)
+    except ValueError:
+        return jsonify({"error": "fecha_nacimiento debe tener formato YYYY-MM-DD"}), 400
 
     correo = correo.lower().strip()
 
@@ -50,7 +72,8 @@ def register():
         correo=correo,
         rol="usuario",
         telefono=data.get("telefono"),
-        sexo=data.get("sexo"),
+        sexo=sexo,
+        fecha_de_nacimiento=fecha_nacimiento,
         ciudad_id=data.get("ciudad_id"),
         registro_completo_en=datetime.now(timezone.utc),
     )
@@ -89,6 +112,65 @@ def login():
         additional_claims={"rol": usuario.rol},
     )
     return jsonify({"access_token": access_token, "usuario": usuario.to_dict()}), 200
+
+
+@auth_bp.route("/olvide-contrasena", methods=["POST"])
+def olvide_contrasena():
+    """Inicia el flujo de recuperación de contraseña.
+
+    Siempre responde 200 con un mensaje genérico (no confirma si el correo
+    existe, para no filtrar qué correos están registrados). Mientras no
+    haya un servicio de envío de correo integrado, el token de un solo uso
+    se regresa en `token_reseteo` únicamente para pruebas locales; en
+    producción ese token se debe enviar por correo y nunca en la respuesta.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    correo = (data.get("correo") or "").lower().strip()
+
+    if not correo:
+        return jsonify({"error": "correo es obligatorio"}), 400
+
+    respuesta = {
+        "mensaje": "Si el correo está registrado, se enviarán instrucciones para restablecer la contraseña."
+    }
+
+    usuario = Usuario.query.filter_by(correo=correo).first()
+    if usuario:
+        _, token_plano = TokenVerificacion.generar(
+            usuario.id, "restablecer_contrasena", minutos_validez=30
+        )
+        # TODO: enviar `token_plano` por correo cuando exista un servicio de
+        # email; por ahora se expone en la respuesta solo para pruebas.
+        respuesta["token_reseteo"] = token_plano
+
+    return jsonify(respuesta), 200
+
+
+@auth_bp.route("/restablecer-contrasena", methods=["POST"])
+def restablecer_contrasena():
+    """Completa el flujo de recuperación: intercambia el token de un solo
+    uso (obtenido en /olvide-contrasena) por una contraseña nueva."""
+    data = request.get_json(force=True, silent=True) or {}
+    token_plano = data.get("token")
+    nueva_password = data.get("nueva_password")
+
+    if not token_plano or not nueva_password:
+        return jsonify({"error": "token y nueva_password son obligatorios"}), 400
+    if len(nueva_password) < 8:
+        return jsonify({"error": "nueva_password debe tener al menos 8 caracteres"}), 400
+
+    token = TokenVerificacion.buscar_valido("restablecer_contrasena", token_plano)
+    if token is None:
+        return jsonify({"error": "Token inválido, expirado o ya utilizado"}), 400
+
+    usuario = Usuario.query.get(token.usuario_id)
+    if usuario is None:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+    usuario.set_password(nueva_password)
+    token.marcar_usado()  # hace commit de la sesión completa (usuario + token)
+
+    return jsonify({"mensaje": "Contraseña actualizada correctamente"}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])

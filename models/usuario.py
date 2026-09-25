@@ -9,16 +9,23 @@ from database import db
 # ligado a un usuario con estado_validacion propio (Fase 3).
 ROLES_VALIDOS = ("usuario", "admin")
 
-# Valores válidos para `usuarios.estado_cuenta`.
-ESTADOS_CUENTA = ("activa", "suspendida", "eliminada")
+# Valores válidos para `usuarios.estado_cuenta` (coincide con el CHECK real
+# de Neon; "pendiente_verificacion" es el default en la BD, se deja aquí
+# aunque el flujo de verificación de correo todavía no está implementado).
+ESTADOS_CUENTA = ("pendiente_verificacion", "activa", "suspendida", "eliminada")
+
+# Valores válidos para `usuarios.sexo` (CHECK real de Neon).
+SEXOS_VALIDOS = ("masculino", "femenino", "otro", "prefiero_no_decir")
 
 
 class Usuario(db.Model):
     """Cuenta de la plataforma (tabla `usuarios` del modelo entidad-relación).
 
-    Nombres de columna fieles al diagrama, salvo `contrasena_hash`
-    (el diagrama la llama `constrasena`: aquí solo se guarda el hash,
-    nunca la contraseña en claro).
+    Nombres de atributo en Python fieles al diagrama original; se mapean
+    explícitamente a los nombres reales de columna en Neon con
+    `db.Column("nombre_real", ...)` donde difieren (`contrasena_hash` ->
+    `contrasena`, `fecha_de_nacimiento` -> `fecha_nacimiento`). Solo se
+    guarda el hash de la contraseña, nunca la contraseña en claro.
     """
 
     __tablename__ = "usuarios"
@@ -26,23 +33,30 @@ class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre_completo = db.Column(db.String(150), nullable=False)
     correo = db.Column(db.String(150), nullable=False, unique=True)
-    contrasena_hash = db.Column(db.String(255), nullable=False)
-    fecha_de_nacimiento = db.Column(db.Date, nullable=True)
+    contrasena_hash = db.Column("contrasena", db.String(255), nullable=False)
+    fecha_de_nacimiento = db.Column("fecha_nacimiento", db.Date, nullable=True)
     sexo = db.Column(db.String(20), nullable=True)
     rol = db.Column(db.String(20), nullable=False, default="usuario")
     estado_cuenta = db.Column(db.String(20), nullable=False, default="activa")
     correo_verificado_en = db.Column(db.DateTime, nullable=True)
     registro_completo_en = db.Column(db.DateTime, nullable=True)
     ultimo_acceso = db.Column(db.DateTime, nullable=True)
-    nombre_usuario = db.Column(db.String(50), nullable=False, unique=True)
+    nombre_usuario = db.Column(db.String(30), nullable=False, unique=True)
     telefono = db.Column(db.String(20), nullable=True)
     ciudad_id = db.Column(db.Integer, db.ForeignKey("ciudades.id"), nullable=True)
     idioma = db.Column(db.String(10), nullable=False, default="es")
     zona_horaria = db.Column(db.String(50), nullable=False, default="America/Mexico_City")
     codigo_referido = db.Column(db.String(20), nullable=True, unique=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    # En Neon esta columna es NOT NULL con DEFAULT CURRENT_TIMESTAMP; como
+    # SQLAlchemy no conoce ese default del lado de la BD, hay que declarar
+    # también `default` aquí (si no, manda NULL explícito en el INSERT y
+    # la base lo rechaza).
     actualizado_en = db.Column(
-        db.DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc)
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     eliminado_en = db.Column(db.DateTime, nullable=True)  # borrado suave
 

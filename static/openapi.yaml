@@ -58,11 +58,12 @@ paths:
                 correo: { type: string, example: "ana@correo.com" }
                 password: { type: string, example: "MiClave123!" }
                 telefono: { type: string }
-                sexo: { type: string }
+                sexo: { type: string, enum: [masculino, femenino, otro, prefiero_no_decir] }
+                fecha_nacimiento: { type: string, format: date, example: "2000-05-10" }
                 ciudad_id: { type: integer }
       responses:
         "201": { description: Usuario creado, regresa access_token + usuario }
-        "400": { description: Campos faltantes }
+        "400": { description: Campos faltantes o inválidos (sexo, fecha_nacimiento) }
         "409": { description: Correo o nombre de usuario ya existen }
 
   /api/auth/login:
@@ -84,6 +85,48 @@ paths:
         "200": { description: Login exitoso, regresa access_token + usuario }
         "401": { description: Credenciales inválidas }
         "403": { description: Cuenta suspendida o eliminada }
+
+  /api/auth/olvide-contrasena:
+    post:
+      summary: Solicitar recuperación de contraseña (genera token de un solo uso)
+      tags: [Autenticación]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correo]
+              properties:
+                correo: { type: string, example: "ana@correo.com" }
+      responses:
+        "200":
+          description: >
+            Mensaje genérico (no revela si el correo existe). Si existe,
+            incluye `token_reseteo` (temporal, solo para pruebas mientras
+            no haya envío de correo real).
+        "400": { description: correo faltante }
+
+  /api/auth/restablecer-contrasena:
+    post:
+      summary: Cambiar la contraseña usando el token de /olvide-contrasena
+      tags: [Autenticación]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, nueva_password]
+              properties:
+                token: { type: string }
+                nueva_password: { type: string, example: "OtraClave456" }
+      responses:
+        "200": { description: Contraseña actualizada correctamente }
+        "400": { description: Datos faltantes, token inválido, expirado o ya usado }
+        "404": { description: Usuario no encontrado }
 
   /api/auth/me:
     get:
