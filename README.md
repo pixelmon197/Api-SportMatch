@@ -1,4 +1,4 @@
-# Api-SportMatch
+# Api-SportMatch 2
 
 API REST de **SportMatch**. Construida en **Flask + Flask-SQLAlchemy**, con
 **PostgreSQL** (Neon) como base de datos, autenticación con **JWT** y
