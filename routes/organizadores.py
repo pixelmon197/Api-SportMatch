@@ -11,6 +11,7 @@ from models import (
     DocumentoValidacion,
     CuentaCobro,
     ROLES_MIEMBRO_ORG,
+    TIPOS_DOCUMENTO_VALIDACION,
 )
 from utils.auth import admin_required, get_usuario_actual, puede_gestionar_organizador
 from utils.auditoria import registrar_auditoria
@@ -32,7 +33,7 @@ def listar_organizadores():
     """Público: solo organizadores aprobados. ?estado_validacion= para admin."""
     query = Organizador.query.filter(Organizador.eliminado_en.is_(None))
     estado = request.args.get("estado_validacion")
-    query = query.filter_by(estado_validacion=estado) if estado else query.filter_by(estado_validacion="aprobado")
+    query = query.filter_by(estado_validacion=estado) if estado else query.filter_by(estado_validacion="aprobada")
     return jsonify([o.to_dict() for o in query.order_by(Organizador.id).all()]), 200
 
 
@@ -50,8 +51,8 @@ def obtener_organizador(organizador_id):
 @jwt_required()
 def crear_organizador():
     """Cualquier usuario autenticado puede crear su perfil de organizador
-    (queda 'pendiente' hasta que envíe una solicitud de validación y un
-    admin la apruebe). Un usuario solo puede tener un organizador propio."""
+    (queda en 'sin_solicitud' hasta que envíe una solicitud de validación y
+    un admin la apruebe). Un usuario solo puede tener un organizador propio."""
     usuario = get_usuario_actual()
     if Organizador.query.filter_by(usuario_id=usuario.id).first():
         return jsonify({"error": "Ya tienes un perfil de organizador"}), 409
@@ -67,7 +68,7 @@ def crear_organizador():
         correo_contacto=data.get("correo_contacto"),
         telefono_contacto=data.get("telefono_contacto"),
         ciudad_id=data.get("ciudad_id"),
-        estado_validacion="pendiente",
+        estado_validacion="sin_solicitud",
     )
     db.session.add(organizador)
     db.session.flush()
@@ -112,7 +113,7 @@ def agregar_miembro(organizador_id):
     Organizador.query.get_or_404(organizador_id)
     data = request.get_json(force=True, silent=True) or {}
     usuario_id = data.get("usuario_id")
-    rol = data.get("rol", "editor")
+    rol = data.get("rol", "colaborador")
 
     if not usuario_id:
         return jsonify({"error": "usuario_id es obligatorio"}), 400
@@ -222,13 +223,20 @@ def enviar_solicitud(organizador_id):
     db.session.flush()
 
     for doc in data.get("documentos", []):
-        if not doc.get("tipo_documento"):
+        tipo_documento = doc.get("tipo_documento")
+        archivo_id = doc.get("archivo_id")
+        if not tipo_documento or not archivo_id:
             continue
+        if tipo_documento not in TIPOS_DOCUMENTO_VALIDACION:
+            db.session.rollback()
+            return jsonify(
+                {"error": f"tipo_documento debe ser uno de: {', '.join(TIPOS_DOCUMENTO_VALIDACION)}"}
+            ), 400
         db.session.add(
             DocumentoValidacion(
                 solicitud_id=solicitud.id,
-                tipo_documento=doc["tipo_documento"],
-                archivo_id=doc.get("archivo_id"),
+                tipo_documento=tipo_documento,
+                archivo_id=archivo_id,
                 numero_documento=doc.get("numero_documento"),
             )
         )
@@ -246,13 +254,21 @@ def agregar_documento(solicitud_id):
         return error
 
     data = request.get_json(force=True, silent=True) or {}
-    if not data.get("tipo_documento"):
+    tipo_documento = data.get("tipo_documento")
+    archivo_id = data.get("archivo_id")
+    if not tipo_documento:
         return jsonify({"error": "tipo_documento es obligatorio"}), 400
+    if tipo_documento not in TIPOS_DOCUMENTO_VALIDACION:
+        return jsonify(
+            {"error": f"tipo_documento debe ser uno de: {', '.join(TIPOS_DOCUMENTO_VALIDACION)}"}
+        ), 400
+    if not archivo_id:
+        return jsonify({"error": "archivo_id es obligatorio"}), 400
 
     documento = DocumentoValidacion(
         solicitud_id=solicitud_id,
-        tipo_documento=data["tipo_documento"],
-        archivo_id=data.get("archivo_id"),
+        tipo_documento=tipo_documento,
+        archivo_id=archivo_id,
         numero_documento=data.get("numero_documento"),
     )
     db.session.add(documento)
@@ -293,12 +309,12 @@ def revisar_solicitud(solicitud_id):
 
     if decision == "aprobar":
         solicitud.estado = "aprobada"
-        organizador.estado_validacion = "aprobado"
+        organizador.estado_validacion = "aprobada"
         organizador.validado_en = datetime.now(timezone.utc)
     else:
         solicitud.estado = "rechazada"
         solicitud.motivo_rechazo = data.get("motivo_rechazo")
-        organizador.estado_validacion = "rechazado"
+        organizador.estado_validacion = "rechazada"
 
     db.session.commit()
 

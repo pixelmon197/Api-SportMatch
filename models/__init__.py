@@ -57,6 +57,7 @@ from models.organizador import (
     ESTADOS_VALIDACION_ORG,
     ESTADOS_SOLICITUD,
     ROLES_MIEMBRO_ORG,
+    TIPOS_DOCUMENTO_VALIDACION,
 )
 
 # Fase 3 — Administración y soporte
@@ -116,6 +117,7 @@ __all__ = [
     "ESTADOS_VALIDACION_ORG",
     "ESTADOS_SOLICITUD",
     "ROLES_MIEMBRO_ORG",
+    "TIPOS_DOCUMENTO_VALIDACION",
     "AuditoriaLog",
     "Reporte",
     "TicketSoporte",

@@ -2,10 +2,13 @@ from datetime import datetime, timezone
 
 from database import db
 
-# Valores válidos (ver docs/entidades_completas.md).
-ESTADOS_VALIDACION_ORG = ("pendiente", "en_revision", "aprobado", "rechazado", "suspendido")
+# Valores válidos (deben coincidir con los CHECK reales de Neon).
+# `sin_solicitud` es el default real en Neon: un organizador nuevo no tiene
+# nada que revisar hasta que manda su primera solicitud.
+ESTADOS_VALIDACION_ORG = ("sin_solicitud", "pendiente", "en_revision", "aprobada", "rechazada", "revocada")
 ESTADOS_SOLICITUD = ("pendiente", "en_revision", "aprobada", "rechazada")
-ROLES_MIEMBRO_ORG = ("propietario", "administrador", "editor")
+ROLES_MIEMBRO_ORG = ("propietario", "administrador", "colaborador")
+TIPOS_DOCUMENTO_VALIDACION = ("ine", "curp", "comprobante_domicilio", "rfc", "permiso_evento")
 
 
 class Organizador(db.Model):
@@ -24,11 +27,17 @@ class Organizador(db.Model):
     telefono_contacto = db.Column(db.String(20), nullable=True)
     ciudad_id = db.Column(db.Integer, db.ForeignKey("ciudades.id"), nullable=True)
     logo_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
-    estado_validacion = db.Column(db.String(20), nullable=False, default="pendiente")
+    estado_validacion = db.Column(db.String(20), nullable=False, default="sin_solicitud")
     validado_en = db.Column(db.DateTime, nullable=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    # En Neon es NOT NULL DEFAULT CURRENT_TIMESTAMP; sin `default` aquí,
+    # SQLAlchemy manda NULL explícito y la BD lo rechaza (mismo bug que ya
+    # se corrigió en Usuario y Evento).
     actualizado_en = db.Column(
-        db.DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc)
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     eliminado_en = db.Column(db.DateTime, nullable=True)
 
@@ -61,7 +70,7 @@ class OrganizadorMiembro(db.Model):
 
     organizador_id = db.Column(db.Integer, db.ForeignKey("organizadores.id"), primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), primary_key=True)
-    rol = db.Column(db.String(20), nullable=False, default="editor")
+    rol = db.Column(db.String(20), nullable=False, default="colaborador")
     agregado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     usuario = db.relationship("Usuario")
@@ -115,7 +124,10 @@ class DocumentoValidacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitud_id = db.Column(db.Integer, db.ForeignKey("solicitudes_validacion.id"), nullable=False)
     tipo_documento = db.Column(db.String(50), nullable=False)  # ej. "ine", "constancia_fiscal"
-    archivo_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
+    # NOT NULL en Neon: no hay todavía un módulo de subida de archivos, así
+    # que las rutas deben exigir un archivo_id ya existente (ver validación
+    # en routes/organizadores.py) en vez de dejarlo en None.
+    archivo_id = db.Column(db.Integer, nullable=False)
     numero_documento = db.Column(db.String(50), nullable=True)
     verificado = db.Column(db.Boolean, nullable=False, default=False)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -139,7 +151,7 @@ class CuentaCobro(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     organizador_id = db.Column(db.Integer, db.ForeignKey("organizadores.id"), nullable=False)
-    banco = db.Column(db.String(100), nullable=False)
+    banco = db.Column(db.String(50), nullable=False)
     titular = db.Column(db.String(150), nullable=False)
     clabe = db.Column(db.String(18), nullable=False)
     verificada = db.Column(db.Boolean, nullable=False, default=False)
