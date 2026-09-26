@@ -50,7 +50,7 @@ class Inscripcion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
-    fecha_id = db.Column(db.Integer, db.ForeignKey("eventos_fechas.id"), nullable=False)
+    fecha_id = db.Column(db.Integer, db.ForeignKey("evento_fechas.id"), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey("evento_categorias.id"), nullable=False)
     boleto_id = db.Column(db.Integer, db.ForeignKey("evento_boletos.id"), nullable=False)
     paquete_id = db.Column(db.Integer, db.ForeignKey("paquete_recuperacion.id"), nullable=True)
@@ -139,7 +139,7 @@ class CalendarioUsuario(db.Model):
     __tablename__ = "calendario_usuario"
 
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), primary_key=True)
-    fecha_id = db.Column(db.Integer, db.ForeignKey("eventos_fechas.id"), primary_key=True)
+    fecha_id = db.Column(db.Integer, db.ForeignKey("evento_fechas.id"), primary_key=True)
     agregado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     fecha = db.relationship("EventoFecha")

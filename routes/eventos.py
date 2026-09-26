@@ -17,6 +17,7 @@ from models import (
     EventoBoleto,
     Deporte,
     Organizador,
+    TIPOS_EVENTO,
     ESTADOS_EVENTO,
     DIFICULTADES_EVENTO,
     TIPOS_SEDE,
@@ -42,6 +43,37 @@ def _generar_slug_unico(titulo):
         slug = f"{base}-{i}"
         i += 1
     return slug
+
+
+def _validar_categoria(datos):
+    """Valida los CHECK reales de `evento_categorias`. Regresa un mensaje
+    de error (str) o None si todo está bien."""
+    edad_minima = datos.get("edad_minima")
+    edad_maxima = datos.get("edad_maxima")
+    distancia_km = datos.get("distancia_km")
+    cupo_total = datos.get("cupo_total")
+    if edad_minima is not None and edad_maxima is not None and edad_maxima < edad_minima:
+        return "edad_maxima no puede ser menor que edad_minima"
+    if distancia_km is not None and distancia_km <= 0:
+        return "distancia_km debe ser mayor a 0"
+    if cupo_total is not None and cupo_total <= 0:
+        return "cupo_total debe ser mayor a 0"
+    return None
+
+
+def _validar_boleto(datos):
+    """Valida los CHECK reales de `evento_boletos`. Regresa un mensaje de
+    error (str) o None si todo está bien."""
+    tipo = datos.get("tipo", "general")
+    if tipo not in TIPOS_BOLETO:
+        return f"tipo de boleto debe ser uno de: {', '.join(TIPOS_BOLETO)}"
+    precio = datos.get("precio", 0)
+    if precio is not None and precio < 0:
+        return "precio no puede ser negativo"
+    desde, hasta = datos.get("disponible_desde"), datos.get("disponible_hasta")
+    if desde and hasta and parse_datetime(hasta) <= parse_datetime(desde):
+        return "disponible_hasta debe ser posterior a disponible_desde"
+    return None
 
 
 def evento_gestion_required(resolver):
@@ -171,19 +203,26 @@ def crear_evento():
 
     if not titulo or not tipo:
         return jsonify({"error": "titulo y tipo son obligatorios"}), 400
+    if tipo not in TIPOS_EVENTO:
+        return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_EVENTO)}"}), 400
     if data.get("dificultad") and data["dificultad"] not in DIFICULTADES_EVENTO:
         return jsonify({"error": f"dificultad debe ser una de: {', '.join(DIFICULTADES_EVENTO)}"}), 400
+    edad_minima = data.get("edad_minima")
+    if edad_minima is not None and edad_minima < 0:
+        return jsonify({"error": "edad_minima no puede ser negativa"}), 400
 
+    # organizador_id es NOT NULL en Neon: todo evento (incluso uno creado
+    # por un admin) debe pertenecer a un organizador ya existente.
+    if not organizador_id:
+        return jsonify({"error": "organizador_id es obligatorio para crear un evento"}), 400
+    organizador = Organizador.query.get(organizador_id)
+    if not organizador:
+        return jsonify({"error": "organizador_id inválido"}), 400
     if usuario.rol != "admin":
-        if not organizador_id:
-            return jsonify({"error": "organizador_id es obligatorio para crear un evento"}), 400
-        organizador = Organizador.query.get(organizador_id)
-        if not organizador or not puede_gestionar_organizador(usuario, organizador_id):
+        if not puede_gestionar_organizador(usuario, organizador_id):
             return jsonify({"error": "No perteneces a ese organizador"}), 403
         if organizador.estado_validacion != "aprobada":
             return jsonify({"error": "Ese organizador todavía no está aprobado para publicar eventos"}), 403
-    elif organizador_id and not Organizador.query.get(organizador_id):
-        return jsonify({"error": "organizador_id inválido"}), 400
 
     evento = Evento(
         organizador_id=organizador_id,
@@ -192,7 +231,7 @@ def crear_evento():
         titulo=titulo,
         slug=data.get("slug") or _generar_slug_unico(titulo),
         descripcion=data.get("descripcion"),
-        edad_minima=data.get("edad_minima"),
+        edad_minima=edad_minima,
         es_publico=data.get("es_publico", True),
         estado="borrador",
     )
@@ -208,10 +247,14 @@ def crear_evento():
         )
 
     for sede in data.get("sedes", []):
+        tipo_sede = sede.get("tipo", "punto_encuentro")
+        if tipo_sede not in TIPOS_SEDE:
+            db.session.rollback()
+            return jsonify({"error": f"tipo de sede debe ser uno de: {', '.join(TIPOS_SEDE)}"}), 400
         db.session.add(
             EventoSede(
                 evento_id=evento.id,
-                tipo=sede.get("tipo", "sede_unica"),
+                tipo=tipo_sede,
                 nombre=sede["nombre"],
                 direccion=sede.get("direccion"),
                 ciudad_id=sede.get("ciudad_id"),
@@ -230,6 +273,10 @@ def crear_evento():
         )
 
     for cat in data.get("categorias", []):
+        error = _validar_categoria(cat)
+        if error:
+            db.session.rollback()
+            return jsonify({"error": error}), 400
         categoria = EventoCategoria(
             evento_id=evento.id,
             nombre=cat["nombre"],
@@ -242,6 +289,10 @@ def crear_evento():
         db.session.add(categoria)
         db.session.flush()
         for boleto in cat.get("boletos", []):
+            error = _validar_boleto(boleto)
+            if error:
+                db.session.rollback()
+                return jsonify({"error": error}), 400
             db.session.add(
                 EventoBoleto(
                     categoria_id=categoria.id,
@@ -269,6 +320,12 @@ def actualizar_evento(evento_id):
             return jsonify({"error": f"estado debe ser uno de: {', '.join(ESTADOS_EVENTO)}"}), 400
         if data["estado"] == "publicado" and evento.publicado_en is None:
             evento.publicado_en = datetime.now(timezone.utc)
+    if "tipo" in data and data["tipo"] not in TIPOS_EVENTO:
+        return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_EVENTO)}"}), 400
+    if data.get("dificultad") and data["dificultad"] not in DIFICULTADES_EVENTO:
+        return jsonify({"error": f"dificultad debe ser una de: {', '.join(DIFICULTADES_EVENTO)}"}), 400
+    if data.get("edad_minima") is not None and data["edad_minima"] < 0:
+        return jsonify({"error": "edad_minima no puede ser negativa"}), 400
 
     for campo in ("tipo", "dificultad", "titulo", "descripcion", "edad_minima", "es_publico", "estado"):
         if campo in data:
@@ -298,6 +355,8 @@ def agregar_deporte_evento(evento_id):
     deporte_id = data.get("deporte_id")
     if not deporte_id or not Deporte.query.get(deporte_id):
         return jsonify({"error": "deporte_id inválido"}), 400
+    if EventoDeporte.query.get((evento_id, deporte_id)):
+        return jsonify({"error": "Ese deporte ya está asociado al evento"}), 409
 
     db.session.add(EventoDeporte(evento_id=evento_id, deporte_id=deporte_id))
     db.session.commit()
@@ -352,12 +411,13 @@ def agregar_sede(evento_id):
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("nombre"):
         return jsonify({"error": "nombre es obligatorio"}), 400
-    if data.get("tipo") and data["tipo"] not in TIPOS_SEDE:
+    tipo_sede = data.get("tipo", "punto_encuentro")
+    if tipo_sede not in TIPOS_SEDE:
         return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_SEDE)}"}), 400
 
     sede = EventoSede(
         evento_id=evento_id,
-        tipo=data.get("tipo", "sede_unica"),
+        tipo=tipo_sede,
         nombre=data["nombre"],
         direccion=data.get("direccion"),
         ciudad_id=data.get("ciudad_id"),
@@ -374,6 +434,8 @@ def agregar_sede(evento_id):
 def actualizar_sede(sede_id):
     sede = EventoSede.query.get_or_404(sede_id)
     data = request.get_json(force=True, silent=True) or {}
+    if "tipo" in data and data["tipo"] not in TIPOS_SEDE:
+        return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_SEDE)}"}), 400
     for campo in ("tipo", "nombre", "direccion", "ciudad_id", "latitud", "longitud"):
         if campo in data:
             setattr(sede, campo, data[campo])
@@ -433,6 +495,9 @@ def agregar_categoria(evento_id):
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("nombre"):
         return jsonify({"error": "nombre es obligatorio"}), 400
+    error = _validar_categoria(data)
+    if error:
+        return jsonify({"error": error}), 400
 
     categoria = EventoCategoria(
         evento_id=evento_id,
@@ -453,6 +518,15 @@ def agregar_categoria(evento_id):
 def actualizar_categoria(categoria_id):
     categoria = EventoCategoria.query.get_or_404(categoria_id)
     data = request.get_json(force=True, silent=True) or {}
+    datos_completos = {
+        "edad_minima": data.get("edad_minima", categoria.edad_minima),
+        "edad_maxima": data.get("edad_maxima", categoria.edad_maxima),
+        "distancia_km": data.get("distancia_km", categoria.distancia_km),
+        "cupo_total": data.get("cupo_total", categoria.cupo_total),
+    }
+    error = _validar_categoria(datos_completos)
+    if error:
+        return jsonify({"error": error}), 400
     for campo in (
         "nombre", "distancia_km", "edad_minima", "edad_maxima", "cupo_total", "permite_lista_espera",
     ):
@@ -475,8 +549,9 @@ def eliminar_categoria(categoria_id):
 @evento_gestion_required(_evento_de_categoria)
 def agregar_boleto(categoria_id):
     data = request.get_json(force=True, silent=True) or {}
-    if data.get("tipo") and data["tipo"] not in TIPOS_BOLETO:
-        return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_BOLETO)}"}), 400
+    error = _validar_boleto(data)
+    if error:
+        return jsonify({"error": error}), 400
 
     boleto = EventoBoleto(
         categoria_id=categoria_id,
@@ -497,6 +572,15 @@ def agregar_boleto(categoria_id):
 def actualizar_boleto(boleto_id):
     boleto = EventoBoleto.query.get_or_404(boleto_id)
     data = request.get_json(force=True, silent=True) or {}
+    datos_completos = {
+        "tipo": data.get("tipo", boleto.tipo),
+        "precio": data.get("precio", boleto.precio),
+        "disponible_desde": data.get("disponible_desde", boleto.disponible_desde),
+        "disponible_hasta": data.get("disponible_hasta", boleto.disponible_hasta),
+    }
+    error = _validar_boleto(datos_completos)
+    if error:
+        return jsonify({"error": error}), 400
     for campo in ("tipo", "precio", "moneda", "cantidad_maxima", "activo"):
         if campo in data:
             setattr(boleto, campo, data[campo])

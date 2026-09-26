@@ -2,11 +2,12 @@ from datetime import datetime, timezone
 
 from database import db
 
-# Valores válidos (ver docs/entidades_completas.md).
-ESTADOS_EVENTO = ("borrador", "publicado", "cancelado", "finalizado")
-DIFICULTADES_EVENTO = ("principiante", "intermedio", "avanzado", "elite")
-TIPOS_SEDE = ("salida", "meta", "punto_control", "sede_unica")
-TIPOS_BOLETO = ("general", "early_bird", "vip", "grupal")
+# Valores válidos (deben coincidir con los CHECK reales de Neon).
+TIPOS_EVENTO = ("carrera", "ruta", "torneo", "liga", "entrenamiento", "experiencia_grupal")
+ESTADOS_EVENTO = ("borrador", "en_revision", "publicado", "cancelado", "finalizado")
+DIFICULTADES_EVENTO = ("facil", "moderada", "dificil", "extrema")
+TIPOS_SEDE = ("salida", "meta", "punto_encuentro", "entrega_kit")
+TIPOS_BOLETO = ("general", "preventa", "estudiante", "grupal")
 
 
 class Evento(db.Model):
@@ -15,20 +16,28 @@ class Evento(db.Model):
     __tablename__ = "eventos"
 
     id = db.Column(db.Integer, primary_key=True)
-    organizador_id = db.Column(db.Integer, db.ForeignKey("organizadores.id"), nullable=True)
-    tipo = db.Column(db.String(50), nullable=False)  # carrera, torneo, clinica, etc.
+    # NOT NULL en Neon: todo evento pertenece a un organizador (no existe
+    # el caso de "evento creado directo por la plataforma sin organizador").
+    organizador_id = db.Column(db.Integer, db.ForeignKey("organizadores.id"), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False)  # ver TIPOS_EVENTO
     estado = db.Column(db.String(20), nullable=False, default="borrador")
     dificultad = db.Column(db.String(20), nullable=True)
     titulo = db.Column(db.String(150), nullable=False)
-    slug = db.Column(db.String(170), nullable=False, unique=True)
+    slug = db.Column(db.String(150), nullable=False, unique=True)
     descripcion = db.Column(db.Text, nullable=True)
     portada_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
     edad_minima = db.Column(db.Integer, nullable=True)
     es_publico = db.Column(db.Boolean, nullable=False, default=True)
     publicado_en = db.Column(db.DateTime, nullable=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    # NOT NULL DEFAULT CURRENT_TIMESTAMP en Neon; sin `default` aquí,
+    # SQLAlchemy manda NULL explícito y la BD lo rechaza (mismo bug que
+    # ya se corrigió en Usuario/Organizador).
     actualizado_en = db.Column(
-        db.DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc)
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     eliminado_en = db.Column(db.DateTime, nullable=True)  # borrado suave
 
@@ -67,17 +76,19 @@ class Evento(db.Model):
 
 
 class EventoDeporte(db.Model):
+    """Tabla `evento_deportes`: PK compuesta real en Neon (evento_id +
+    deporte_id), sin columna `id` propia."""
+
     __tablename__ = "evento_deportes"
 
-    id = db.Column(db.Integer, primary_key=True)
-    evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
-    deporte_id = db.Column(db.Integer, db.ForeignKey("deportes.id"), nullable=False)
+    evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), primary_key=True)
+    deporte_id = db.Column(db.Integer, db.ForeignKey("deportes.id"), primary_key=True)
 
     deporte = db.relationship("Deporte")
 
 
 class EventoRequisito(db.Model):
-    __tablename__ = "eventos_requisitos"
+    __tablename__ = "evento_requisitos"
 
     id = db.Column(db.Integer, primary_key=True)
     evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
@@ -93,7 +104,7 @@ class EventoSede(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False, default="sede_unica")
+    tipo = db.Column(db.String(20), nullable=False, default="punto_encuentro")
     nombre = db.Column(db.String(150), nullable=False)
     direccion = db.Column(db.String(255), nullable=True)
     ciudad_id = db.Column(db.Integer, db.ForeignKey("ciudades.id"), nullable=True)
@@ -115,7 +126,7 @@ class EventoSede(db.Model):
 
 
 class EventoFecha(db.Model):
-    __tablename__ = "eventos_fechas"
+    __tablename__ = "evento_fechas"
 
     id = db.Column(db.Integer, primary_key=True)
     evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
