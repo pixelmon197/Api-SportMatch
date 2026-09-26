@@ -9,3 +9,6 @@ psycopg2-binary==2.9.9
 
 # Autenticación con JWT
 Flask-JWT-Extended==4.6.0
+
+# Servidor para producción
+gunicorn==23.0.0
