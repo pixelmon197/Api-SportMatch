@@ -20,15 +20,29 @@ components:
     Usuario:
       type: object
       properties:
-        id: { type: integer }
-        nombre_completo: { type: string }
-        correo: { type: string }
-        nombre_usuario: { type: string }
-        rol: { type: string, enum: [usuario, admin] }
-        estado_cuenta: { type: string, enum: [activa, suspendida, eliminada] }
-        telefono: { type: string }
+        id: { type: integer, example: 1 }
+        nombre_completo: { type: string, example: "Ana Pérez" }
+        correo: { type: string, example: "ana@correo.com" }
+        nombre_usuario: { type: string, example: "anaperez" }
+        rol: { type: string, enum: [usuario, admin], example: "usuario" }
+        estado_cuenta: { type: string, enum: [pendiente_verificacion, activa, suspendida, eliminada], example: "activa" }
+        telefono: { type: string, example: "5512345678" }
         ciudad: { type: object, nullable: true }
-        creado_en: { type: string, format: date-time }
+        creado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
+    Deporte:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        nombre: { type: string, example: "Running" }
+        categoria: { type: string, example: "resistencia" }
+        activo: { type: boolean, example: true }
+    UsuarioDeporte:
+      type: object
+      description: Deporte que practica un usuario (tabla `usuario_deportes`).
+      properties:
+        deporte: { $ref: "#/components/schemas/Deporte" }
+        nivel: { type: string, enum: [principiante, intermedio, avanzado, profesional], example: "intermedio" }
+        es_principal: { type: boolean, example: true }
 security:
   - bearerAuth: []
 paths:
@@ -267,7 +281,11 @@ paths:
       tags: [Deportes]
       security: []
       responses:
-        "200": { description: Lista de deportes }
+        "200":
+          description: Lista de deportes
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Deporte" } }
     post:
       summary: Crear un deporte (solo admin)
       tags: [Deportes]
@@ -281,8 +299,13 @@ paths:
               properties:
                 nombre: { type: string, example: "Running" }
                 categoria: { type: string, example: "resistencia" }
+                activo: { type: boolean, example: true }
       responses:
-        "201": { description: Deporte creado }
+        "201":
+          description: Deporte creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deporte" }
         "409": { description: Ya existe un deporte con ese nombre }
 
   /api/deportes/{deporte_id}:
@@ -291,30 +314,56 @@ paths:
       tags: [Deportes]
       security: []
       parameters:
-        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
-        "200": { description: Deporte encontrado }
+        "200":
+          description: Deporte encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deporte" }
     put:
       summary: Actualizar un deporte (solo admin)
       tags: [Deportes]
       parameters:
-        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, example: "Running" }
+                categoria: { type: string, example: "resistencia" }
+                activo: { type: boolean, example: true }
       responses:
-        "200": { description: Deporte actualizado }
+        "200":
+          description: Deporte actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deporte" }
     delete:
       summary: Desactivar un deporte (borrado suave, solo admin)
       tags: [Deportes]
       parameters:
-        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
-        "200": { description: Deporte desactivado }
+        "200":
+          description: Deporte desactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deporte" }
 
   /api/deportes/me:
     get:
       summary: Listar mis deportes
       tags: [Deportes]
       responses:
-        "200": { description: Deportes del usuario autenticado }
+        "200":
+          description: Deportes del usuario autenticado
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
     post:
       summary: Agregar un deporte a mi perfil
       tags: [Deportes]
@@ -326,11 +375,15 @@ paths:
               type: object
               required: [deporte_id]
               properties:
-                deporte_id: { type: integer }
-                nivel: { type: string, enum: [principiante, intermedio, avanzado, profesional] }
-                es_principal: { type: boolean }
+                deporte_id: { type: integer, example: 1 }
+                nivel: { type: string, enum: [principiante, intermedio, avanzado, profesional], example: "intermedio" }
+                es_principal: { type: boolean, example: true }
       responses:
-        "201": { description: Deporte agregado }
+        "201":
+          description: Deporte agregado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDeporte" }
         "409": { description: Ya tienes ese deporte registrado }
 
   /api/deportes/me/{deporte_id}:
@@ -338,14 +391,27 @@ paths:
       summary: Actualizar nivel / es_principal de uno de mis deportes
       tags: [Deportes]
       parameters:
-        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nivel: { type: string, enum: [principiante, intermedio, avanzado, profesional], example: "avanzado" }
+                es_principal: { type: boolean, example: true }
       responses:
-        "200": { description: Actualizado }
+        "200":
+          description: Actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDeporte" }
     delete:
       summary: Quitar un deporte de mi perfil
       tags: [Deportes]
       parameters:
-        - { name: deporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "204": { description: Eliminado }
 

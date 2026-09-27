@@ -1,20 +1,20 @@
 from database import db
 
-# Niveles válidos para `usuarios_deportes.nivel`.
+# Niveles válidos para `usuario_deportes.nivel` (coincide con el CHECK real de Neon).
 NIVELES_DEPORTE = ("principiante", "intermedio", "avanzado", "profesional")
 
 
 class Deporte(db.Model):
     """Catálogo de deportes (tabla `Deportes` del modelo entidad-relación).
 
-    Es el catálogo base del que dependen usuarios_deportes, rutas,
+    Es el catálogo base del que dependen usuario_deportes, rutas,
     evento_deportes y las opciones del cuestionario de registro.
     """
 
     __tablename__ = "deportes"
 
     id = db.Column(db.Integer, primary_key=True)
-    nombre = db.Column(db.String(80), nullable=False, unique=True)
+    nombre = db.Column(db.String(100), nullable=False, unique=True)
     categoria = db.Column(db.String(50), nullable=True)  # ej. "resistencia", "equipo"
     activo = db.Column(db.Boolean, nullable=False, default=True)
 
@@ -28,9 +28,12 @@ class Deporte(db.Model):
 
 
 class UsuarioDeporte(db.Model):
-    """Deportes que practica cada usuario (tabla `usuarios_deportes`, PK compuesta)."""
+    """Deportes que practica cada usuario (tabla `usuario_deportes`, PK
+    compuesta). Ojo: en Neon existe también `usuarios_deportes` (con "s"
+    de más), un remanente sin CASCADE ni el CHECK de `nivel` — la tabla
+    vigente es esta, en singular."""
 
-    __tablename__ = "usuarios_deportes"
+    __tablename__ = "usuario_deportes"
 
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), primary_key=True)
     deporte_id = db.Column(db.Integer, db.ForeignKey("deportes.id"), primary_key=True)
