@@ -50,12 +50,12 @@ class Reporte(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     reportante_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     asignado_a = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
-    tipo_entidad = db.Column(db.String(50), nullable=False)  # ej. "usuario", "evento", "ruta"
+    tipo_entidad = db.Column(db.String(30), nullable=False)  # ej. "usuario", "evento", "ruta"
     entidad_id = db.Column(db.Integer, nullable=False)
-    motivo = db.Column(db.String(100), nullable=False)
+    motivo = db.Column(db.String(30), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     estado = db.Column(db.String(20), nullable=False, default="pendiente")
-    accion_tomada = db.Column(db.Text, nullable=True)
+    accion_tomada = db.Column(db.String(30), nullable=True)
     notas_moderador = db.Column(db.Text, nullable=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     resuelto_en = db.Column(db.DateTime, nullable=True)
@@ -83,9 +83,9 @@ class TicketSoporte(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     asignado_a = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
-    categoria = db.Column(db.String(50), nullable=True)  # ej. "pagos", "cuenta", "evento"
-    prioridad = db.Column(db.String(10), nullable=False, default="media")
-    estado = db.Column(db.String(20), nullable=False, default="abierto")
+    categoria = db.Column(db.String(20), nullable=False)  # ej. "pagos", "cuenta", "evento"
+    prioridad = db.Column(db.String(20), nullable=False, default="media")
+    estado = db.Column(db.String(30), nullable=False, default="abierto")
     asunto = db.Column(db.String(150), nullable=False)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     cerrado_en = db.Column(db.DateTime, nullable=True)
@@ -113,13 +113,16 @@ class TicketSoporte(db.Model):
 
 
 class TicketMensaje(db.Model):
-    """Tabla `ticket_mensaje`. El diagrama trae columnas duplicadas de
-    `tickets_soporte` (categoria, prioridad, estado, asunto...), claro
-    artefacto de la herramienta de diagramado; aquí solo se modelan los
-    campos propios: ticket_id, autor_id, mensaje, es_interno, creado_en.
+    """Tabla `ticket_mensajes`. Ojo: en Neon existe también `ticket_mensaje`
+    (sin la "s"), un remanente sin `ON DELETE CASCADE` ni los defaults de
+    `es_interno`/`creado_en` — la tabla vigente es esta, en plural. El
+    diagrama original traía columnas duplicadas de `tickets_soporte`
+    (categoria, prioridad, estado, asunto...), claro artefacto de la
+    herramienta de diagramado; aquí solo se modelan los campos propios:
+    ticket_id, autor_id, mensaje, es_interno, creado_en.
     """
 
-    __tablename__ = "ticket_mensaje"
+    __tablename__ = "ticket_mensajes"
 
     id = db.Column(db.Integer, primary_key=True)
     ticket_id = db.Column(db.Integer, db.ForeignKey("tickets_soporte.id"), nullable=False)

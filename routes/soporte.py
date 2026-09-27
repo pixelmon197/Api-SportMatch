@@ -19,6 +19,15 @@ from utils.auditoria import registrar_auditoria
 soporte_bp = Blueprint("soporte", __name__, url_prefix="/api")
 
 
+def _validar_longitud(valor, campo, maximo):
+    """Los varchar(n) de Neon no truncan como MySQL: si se manda más de
+    n caracteres, Postgres rechaza el INSERT con un error crudo. Se
+    valida antes para responder 400 con un mensaje claro."""
+    if valor is not None and len(valor) > maximo:
+        return f"{campo} no puede tener más de {maximo} caracteres"
+    return None
+
+
 # ============ REPORTES (moderación de contenido / usuarios) ============
 
 @soporte_bp.route("/reportes", methods=["POST"])
@@ -35,6 +44,13 @@ def crear_reporte():
     ]
     if faltantes:
         return jsonify({"error": f"Campos requeridos faltantes: {', '.join(faltantes)}"}), 400
+
+    for error in (
+        _validar_longitud(data["tipo_entidad"], "tipo_entidad", 30),
+        _validar_longitud(data["motivo"], "motivo", 30),
+    ):
+        if error:
+            return jsonify({"error": error}), 400
 
     reporte = Reporte(
         reportante_id=usuario.id,
@@ -96,6 +112,10 @@ def moderar_reporte(reporte_id):
         if data["estado"] in ("resuelto", "desestimado"):
             reporte.resuelto_en = datetime.now(timezone.utc)
 
+    if "accion_tomada" in data:
+        if error := _validar_longitud(data["accion_tomada"], "accion_tomada", 30):
+            return jsonify({"error": error}), 400
+
     for campo in ("asignado_a", "accion_tomada", "notas_moderador"):
         if campo in data:
             setattr(reporte, campo, data[campo])
@@ -126,12 +146,16 @@ def crear_ticket():
 
     if not data.get("asunto") or not data.get("mensaje"):
         return jsonify({"error": "asunto y mensaje son obligatorios"}), 400
+    if not data.get("categoria"):
+        return jsonify({"error": "categoria es obligatoria"}), 400
+    if error := _validar_longitud(data["categoria"], "categoria", 20):
+        return jsonify({"error": error}), 400
     if data.get("prioridad") and data["prioridad"] not in PRIORIDADES_TICKET:
         return jsonify({"error": f"prioridad debe ser una de: {', '.join(PRIORIDADES_TICKET)}"}), 400
 
     ticket = TicketSoporte(
         usuario_id=usuario.id,
-        categoria=data.get("categoria"),
+        categoria=data["categoria"],
         prioridad=data.get("prioridad", "media"),
         asunto=data["asunto"],
     )
@@ -219,6 +243,12 @@ def actualizar_ticket(ticket_id):
         if data["prioridad"] not in PRIORIDADES_TICKET:
             return jsonify({"error": f"prioridad debe ser una de: {', '.join(PRIORIDADES_TICKET)}"}), 400
         ticket.prioridad = data["prioridad"]
+
+    if "categoria" in data:
+        if not data["categoria"]:
+            return jsonify({"error": "categoria no puede quedar vacía"}), 400
+        if error := _validar_longitud(data["categoria"], "categoria", 20):
+            return jsonify({"error": error}), 400
 
     for campo in ("asignado_a", "categoria"):
         if campo in data:

@@ -1031,12 +1031,13 @@ paths:
               type: object
               required: [tipo_entidad, entidad_id, motivo]
               properties:
-                tipo_entidad: { type: string, example: "evento" }
-                entidad_id: { type: integer }
-                motivo: { type: string }
-                descripcion: { type: string }
+                tipo_entidad: { type: string, maxLength: 30, example: "evento" }
+                entidad_id: { type: integer, example: 42 }
+                motivo: { type: string, maxLength: 30, example: "spam" }
+                descripcion: { type: string, example: "Publicó el mismo comentario varias veces" }
       responses:
         "201": { description: Reporte creado }
+        "400": { description: Faltan campos o tipo_entidad/motivo exceden 30 caracteres }
     get:
       summary: Bandeja de moderación (solo admin; ?estado=pendiente por defecto)
       tags: [Administración y soporte]
@@ -1048,7 +1049,7 @@ paths:
       summary: Moderar un reporte (solo admin) — se registra en la bitácora de auditoría
       tags: [Administración y soporte]
       parameters:
-        - { name: reporte_id, in: path, required: true, schema: { type: integer } }
+        - { name: reporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
       requestBody:
         required: true
         content:
@@ -1056,11 +1057,12 @@ paths:
             schema:
               type: object
               properties:
-                estado: { type: string, enum: [pendiente, en_revision, resuelto, desestimado] }
-                accion_tomada: { type: string }
-                notas_moderador: { type: string }
+                estado: { type: string, enum: [pendiente, en_revision, resuelto, desestimado], example: "resuelto" }
+                accion_tomada: { type: string, maxLength: 30, example: "advertencia" }
+                notas_moderador: { type: string, example: "Se contactó al usuario reportado" }
       responses:
         "200": { description: Reporte actualizado }
+        "400": { description: accion_tomada excede 30 caracteres }
 
   /api/tickets:
     post:
@@ -1072,14 +1074,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [asunto, mensaje]
+              required: [asunto, mensaje, categoria]
               properties:
-                asunto: { type: string }
-                mensaje: { type: string }
-                categoria: { type: string }
-                prioridad: { type: string, enum: [baja, media, alta, urgente] }
+                asunto: { type: string, example: "No puedo pagar mi inscripción" }
+                mensaje: { type: string, example: "Me sale un error al intentar pagar con tarjeta" }
+                categoria: { type: string, maxLength: 20, example: "pagos" }
+                prioridad: { type: string, enum: [baja, media, alta, urgente], example: "media" }
       responses:
         "201": { description: Ticket creado }
+        "400": { description: Faltan campos, categoria vacía o excede 20 caracteres }
     get:
       summary: Bandeja de soporte (solo admin; filtros estado, prioridad, asignado_a)
       tags: [Administración y soporte]
@@ -1091,23 +1094,35 @@ paths:
       summary: Detalle de un ticket con sus mensajes (dueño no ve mensajes internos)
       tags: [Administración y soporte]
       parameters:
-        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+        - { name: ticket_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "200": { description: Ticket con mensajes }
     put:
       summary: Asignar, priorizar o cerrar un ticket (solo admin)
       tags: [Administración y soporte]
       parameters:
-        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+        - { name: ticket_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                asignado_a: { type: integer, example: 2 }
+                categoria: { type: string, maxLength: 20, example: "cuenta" }
+                prioridad: { type: string, enum: [baja, media, alta, urgente], example: "alta" }
+                estado: { type: string, enum: [abierto, en_progreso, resuelto, cerrado], example: "cerrado" }
       responses:
         "200": { description: Ticket actualizado }
+        "400": { description: categoria vacía o excede 20 caracteres }
 
   /api/tickets/{ticket_id}/mensajes:
     post:
       summary: Agregar un mensaje al ticket (dueño o admin; solo admin puede marcarlo es_interno)
       tags: [Administración y soporte]
       parameters:
-        - { name: ticket_id, in: path, required: true, schema: { type: integer } }
+        - { name: ticket_id, in: path, required: true, schema: { type: integer, example: 1 } }
       requestBody:
         required: true
         content:
@@ -1116,8 +1131,8 @@ paths:
               type: object
               required: [mensaje]
               properties:
-                mensaje: { type: string }
-                es_interno: { type: boolean }
+                mensaje: { type: string, example: "Ya revisamos tu caso, en breve te contactamos" }
+                es_interno: { type: boolean, example: false }
       responses:
         "201": { description: Mensaje agregado }
 
