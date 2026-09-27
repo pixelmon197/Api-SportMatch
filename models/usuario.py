@@ -4,10 +4,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from database import db
 
-# Valores válidos para `usuarios.rol` (ver docs/entidades_completas.md).
-# "organizador" NO es un rol: es un perfil aparte (tabla `organizadores`)
-# ligado a un usuario con estado_validacion propio (Fase 3).
-ROLES_VALIDOS = ("usuario", "admin")
+# Valores válidos para `usuarios.rol` (coincide con el CHECK real de Neon).
+# Nota: la base también permite "organizador" como rol base, pero hoy no lo
+# usa la app — ser organizador se maneja aparte, con un perfil propio en la
+# tabla `organizadores` ligado al usuario (Fase 3), sin cambiar su rol base.
+# Se deja disponible en el catálogo por si se necesita a futuro.
+ROLES_VALIDOS = ("usuario", "organizador", "administrador")
 
 # Valores válidos para `usuarios.estado_cuenta` (coincide con el CHECK real
 # de Neon; "pendiente_verificacion" es el default en la BD, se deja aquí

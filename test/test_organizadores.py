@@ -123,7 +123,7 @@ client = app.test_client()
 
 with app.app_context():
     token_ana = create_access_token(identity="1", additional_claims={"rol": "usuario"})
-    token_admin = create_access_token(identity="2", additional_claims={"rol": "admin"})
+    token_admin = create_access_token(identity="2", additional_claims={"rol": "administrador"})
     token_luis = create_access_token(identity="3", additional_claims={"rol": "usuario"})
 
 H_ANA = {"Authorization": f"Bearer {token_ana}"}

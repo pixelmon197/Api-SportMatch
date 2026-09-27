@@ -41,7 +41,7 @@ CREATE TABLE usuario_deportes (
 conn = sqlite3.connect(DB_PATH)
 conn.executescript(DDL)
 conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Ana Perez','ana@correo.com','x','2000-01-01','femenino','anaperez','usuario','activa',CURRENT_TIMESTAMP)")
-conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Admin Uno','admin@correo.com','x','1990-01-01','masculino','admin1','admin','activa',CURRENT_TIMESTAMP)")
+conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Admin Uno','admin@correo.com','x','1990-01-01','masculino','admin1','administrador','activa',CURRENT_TIMESTAMP)")
 conn.commit()
 conn.close()
 
@@ -52,7 +52,7 @@ app = create_app()
 client = app.test_client()
 with app.app_context():
     H_ANA = {"Authorization": f"Bearer {create_access_token(identity='1', additional_claims={'rol': 'usuario'})}"}
-    H_ADMIN = {"Authorization": f"Bearer {create_access_token(identity='2', additional_claims={'rol': 'admin'})}"}
+    H_ADMIN = {"Authorization": f"Bearer {create_access_token(identity='2', additional_claims={'rol': 'administrador'})}"}
 
 def show(label, resp):
     print(f"--- {label} [{resp.status_code}] ---")

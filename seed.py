@@ -25,7 +25,7 @@ def seed():
             nombre_completo="Administrador SportMatch",
             nombre_usuario="admin",
             correo="admin@sportmatch.com",
-            rol="admin",
+            rol="administrador",
             estado_cuenta="activa",
             ciudad_id=ciudad.id,
         )

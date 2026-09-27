@@ -9,7 +9,7 @@ rutas_bp = Blueprint("rutas", __name__, url_prefix="/api/rutas")
 
 
 def _es_dueno_o_admin(ruta, usuario):
-    return usuario.rol == "admin" or ruta.creador_id == usuario.id
+    return usuario.rol == "administrador" or ruta.creador_id == usuario.id
 
 
 def _validar_ruta(datos):

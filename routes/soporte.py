@@ -91,7 +91,7 @@ def listar_reportes():
 def obtener_reporte(reporte_id):
     usuario = get_usuario_actual()
     reporte = Reporte.query.get_or_404(reporte_id)
-    if usuario.rol != "admin" and reporte.reportante_id != usuario.id:
+    if usuario.rol != "administrador" and reporte.reportante_id != usuario.id:
         return jsonify({"error": "No tienes acceso a este reporte"}), 403
     return jsonify(reporte.to_dict()), 200
 
@@ -194,9 +194,9 @@ def listar_tickets():
 def obtener_ticket(ticket_id):
     usuario = get_usuario_actual()
     ticket = TicketSoporte.query.get_or_404(ticket_id)
-    if usuario.rol != "admin" and ticket.usuario_id != usuario.id:
+    if usuario.rol != "administrador" and ticket.usuario_id != usuario.id:
         return jsonify({"error": "No tienes acceso a este ticket"}), 403
-    return jsonify(ticket.to_dict(con_mensajes=True, incluir_internos=(usuario.rol == "admin"))), 200
+    return jsonify(ticket.to_dict(con_mensajes=True, incluir_internos=(usuario.rol == "administrador"))), 200
 
 
 @soporte_bp.route("/tickets/<int:ticket_id>/mensajes", methods=["POST"])
@@ -204,7 +204,7 @@ def obtener_ticket(ticket_id):
 def agregar_mensaje(ticket_id):
     usuario = get_usuario_actual()
     ticket = TicketSoporte.query.get_or_404(ticket_id)
-    if usuario.rol != "admin" and ticket.usuario_id != usuario.id:
+    if usuario.rol != "administrador" and ticket.usuario_id != usuario.id:
         return jsonify({"error": "No tienes acceso a este ticket"}), 403
     if ticket.estado == "cerrado":
         return jsonify({"error": "Este ticket ya está cerrado"}), 400
@@ -213,13 +213,13 @@ def agregar_mensaje(ticket_id):
     if not data.get("mensaje"):
         return jsonify({"error": "mensaje es obligatorio"}), 400
 
-    es_interno = bool(data.get("es_interno", False)) and usuario.rol == "admin"
+    es_interno = bool(data.get("es_interno", False)) and usuario.rol == "administrador"
     mensaje = TicketMensaje(ticket_id=ticket_id, autor_id=usuario.id, mensaje=data["mensaje"], es_interno=es_interno)
     db.session.add(mensaje)
 
     # Si responde el usuario, el ticket vuelve a "abierto"; si responde soporte, pasa a "en_progreso".
     if not es_interno:
-        ticket.estado = "en_progreso" if usuario.rol == "admin" else "abierto"
+        ticket.estado = "en_progreso" if usuario.rol == "administrador" else "abierto"
 
     db.session.commit()
     return jsonify(mensaje.to_dict()), 201

@@ -9,7 +9,7 @@ from models import Usuario
 def roles_required(*roles):
     """
     Exige un JWT válido y que el rol del usuario esté en `roles`.
-    Uso: @roles_required("admin") o @roles_required("admin", "usuario")
+    Uso: @roles_required("administrador") o @roles_required("administrador", "usuario")
     """
 
     def decorador(fn):
@@ -29,13 +29,13 @@ def roles_required(*roles):
 
 
 def admin_required(fn):
-    """Exige un JWT válido con rol 'admin'."""
-    return roles_required("admin")(fn)
+    """Exige un JWT válido con rol 'administrador' (valor real de `usuarios.rol` en Neon)."""
+    return roles_required("administrador")(fn)
 
 
 def usuario_autenticado_required(fn):
     """Exige un JWT válido, sin importar el rol."""
-    return roles_required("usuario", "admin")(fn)
+    return roles_required("usuario", "administrador")(fn)
 
 
 def get_usuario_actual():
@@ -56,7 +56,7 @@ def es_miembro_organizador(usuario, organizador_id, roles_permitidos=("propietar
 
 def puede_gestionar_organizador(usuario, organizador_id):
     """Admin, o miembro (propietario/administrador) de ese organizador."""
-    if usuario.rol == "admin":
+    if usuario.rol == "administrador":
         return True
     return es_miembro_organizador(usuario, organizador_id)
 
@@ -64,7 +64,7 @@ def puede_gestionar_organizador(usuario, organizador_id):
 def puede_gestionar_evento(usuario, evento):
     """Admin, o miembro del organizador dueño del evento. Un evento sin
     organizador_id (creado directo por la plataforma) solo lo gestiona admin."""
-    if usuario.rol == "admin":
+    if usuario.rol == "administrador":
         return True
     if evento.organizador_id is None:
         return False

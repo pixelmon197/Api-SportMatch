@@ -4,9 +4,10 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from database import db
-from models import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA
+from models import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from utils.auth import admin_required, get_usuario_actual
 from utils.auditoria import registrar_auditoria
+from utils.fechas import parse_date
 
 usuarios_bp = Blueprint("usuarios", __name__, url_prefix="/api/usuarios")
 
@@ -152,13 +153,17 @@ def cambiar_estado(usuario_id):
 @admin_required
 def crear_admin():
     """Un admin da de alta a otro administrador (equivalente a /auth/register,
-    pero forzando rol='admin'; solo accesible por un admin ya autenticado).
+    pero forzando rol='administrador'; solo accesible por un admin ya
+    autenticado). Sujeto a las mismas reglas que /auth/register: Neon exige
+    fecha_nacimiento y sexo en cuanto se fija registro_completo_en.
     """
     data = request.get_json(force=True, silent=True) or {}
     nombre_completo = data.get("nombre_completo")
-    nombre_usuario = data.get("nombre_usuario")
+    nombre_usuario = (data.get("nombre_usuario") or "").strip().lower() or None
     correo = data.get("correo")
     password = data.get("password")
+    fecha_nacimiento_raw = data.get("fecha_nacimiento")
+    sexo = data.get("sexo")
 
     faltantes = [
         campo
@@ -167,11 +172,24 @@ def crear_admin():
             "nombre_usuario": nombre_usuario,
             "correo": correo,
             "password": password,
+            "fecha_nacimiento": fecha_nacimiento_raw,
+            "sexo": sexo,
         }.items()
         if not valor
     ]
     if faltantes:
         return jsonify({"error": f"Campos requeridos faltantes: {', '.join(faltantes)}"}), 400
+
+    if len(nombre_usuario) > 30:
+        return jsonify({"error": "nombre_usuario no puede tener más de 30 caracteres"}), 400
+
+    if sexo not in SEXOS_VALIDOS:
+        return jsonify({"error": f"sexo debe ser uno de: {', '.join(SEXOS_VALIDOS)}"}), 400
+
+    try:
+        fecha_nacimiento = parse_date(fecha_nacimiento_raw)
+    except ValueError:
+        return jsonify({"error": "fecha_nacimiento debe tener formato YYYY-MM-DD"}), 400
 
     correo = correo.lower().strip()
     if Usuario.query.filter_by(correo=correo).first():
@@ -183,7 +201,10 @@ def crear_admin():
         nombre_completo=nombre_completo,
         nombre_usuario=nombre_usuario,
         correo=correo,
-        rol="admin",
+        rol="administrador",
+        sexo=sexo,
+        fecha_de_nacimiento=fecha_nacimiento,
+        estado_cuenta="activa",
         registro_completo_en=datetime.now(timezone.utc),
     )
     admin.set_password(password)

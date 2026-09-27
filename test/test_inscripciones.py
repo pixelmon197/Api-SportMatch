@@ -126,7 +126,7 @@ conn = sqlite3.connect(DB_PATH)
 conn.executescript(DDL)
 conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Ana Perez','ana@correo.com','x','2000-01-01','femenino','anaperez','usuario','activa',CURRENT_TIMESTAMP)")
 conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Luis Gomez','luis@correo.com','x','1998-01-01','masculino','luisg','usuario','activa',CURRENT_TIMESTAMP)")
-conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Admin Uno','admin@correo.com','x','1990-01-01','masculino','admin1','admin','activa',CURRENT_TIMESTAMP)")
+conn.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) VALUES ('Admin Uno','admin@correo.com','x','1990-01-01','masculino','admin1','administrador','activa',CURRENT_TIMESTAMP)")
 conn.execute("INSERT INTO organizadores (usuario_id, nombre_comercial, estado_validacion) VALUES (1,'Carreras del Valle','aprobada')")
 conn.execute("INSERT INTO organizador_miembros (organizador_id, usuario_id, rol) VALUES (1,1,'propietario')")
 conn.execute("INSERT INTO eventos (organizador_id, tipo, estado, titulo, slug, publicado_en) VALUES (1,'carrera','publicado','5K Nocturna','5k-nocturna',CURRENT_TIMESTAMP)")
@@ -144,7 +144,7 @@ client = app.test_client()
 with app.app_context():
     H_ANA = {"Authorization": f"Bearer {create_access_token(identity='1', additional_claims={'rol': 'usuario'})}"}
     H_LUIS = {"Authorization": f"Bearer {create_access_token(identity='2', additional_claims={'rol': 'usuario'})}"}
-    H_ADMIN = {"Authorization": f"Bearer {create_access_token(identity='3', additional_claims={'rol': 'admin'})}"}
+    H_ADMIN = {"Authorization": f"Bearer {create_access_token(identity='3', additional_claims={'rol': 'administrador'})}"}
 
 def show(label, resp):
     print(f"--- {label} [{resp.status_code}] ---")

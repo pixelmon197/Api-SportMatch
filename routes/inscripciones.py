@@ -227,7 +227,7 @@ def mis_inscripciones():
 def obtener_inscripcion(inscripcion_id):
     usuario = get_usuario_actual()
     inscripcion = Inscripcion.query.get_or_404(inscripcion_id)
-    if usuario.rol != "admin" and inscripcion.usuario_id != usuario.id:
+    if usuario.rol != "administrador" and inscripcion.usuario_id != usuario.id:
         return jsonify({"error": "No tienes acceso a esta inscripción"}), 403
     return jsonify(inscripcion.to_dict(detalle=True)), 200
 
@@ -237,7 +237,7 @@ def obtener_inscripcion(inscripcion_id):
 def cancelar_inscripcion(inscripcion_id):
     usuario = get_usuario_actual()
     inscripcion = Inscripcion.query.get_or_404(inscripcion_id)
-    if usuario.rol != "admin" and inscripcion.usuario_id != usuario.id:
+    if usuario.rol != "administrador" and inscripcion.usuario_id != usuario.id:
         return jsonify({"error": "No tienes acceso a esta inscripción"}), 403
     if inscripcion.estado == "cancelado":
         return jsonify({"error": "Esa inscripción ya estaba cancelada"}), 400

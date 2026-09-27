@@ -218,7 +218,7 @@ def crear_evento():
     organizador = Organizador.query.get(organizador_id)
     if not organizador:
         return jsonify({"error": "organizador_id inválido"}), 400
-    if usuario.rol != "admin":
+    if usuario.rol != "administrador":
         if not puede_gestionar_organizador(usuario, organizador_id):
             return jsonify({"error": "No perteneces a ese organizador"}), 403
         if organizador.estado_validacion != "aprobada":
