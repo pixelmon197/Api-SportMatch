@@ -46,6 +46,7 @@ from models.inscripcion import (
     ValoracionEvento,
     CalendarioUsuario,
     ESTADOS_INSCRIPCION,
+    NIVELES_PAQUETE,
 )
 
 # Fase 3 — Organizadores y validación
@@ -112,6 +113,7 @@ __all__ = [
     "ValoracionEvento",
     "CalendarioUsuario",
     "ESTADOS_INSCRIPCION",
+    "NIVELES_PAQUETE",
     "Organizador",
     "OrganizadorMiembro",
     "SolicitudValidacion",

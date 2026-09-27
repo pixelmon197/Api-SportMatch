@@ -14,8 +14,10 @@ from models import (
     ValoracionEvento,
     CalendarioUsuario,
     ESTADOS_INSCRIPCION,
+    NIVELES_PAQUETE,
 )
 from utils.auth import get_usuario_actual, puede_gestionar_evento
+from utils.fechas import parse_time
 
 inscripciones_bp = Blueprint("inscripciones", __name__, url_prefix="/api")
 
@@ -47,15 +49,23 @@ def crear_paquete(evento_id):
     if error := _requiere_gestion_evento(evento):
         return error
     data = request.get_json(force=True, silent=True) or {}
-    if not data.get("nombre"):
-        return jsonify({"error": "nombre es obligatorio"}), 400
+    nivel = data.get("nivel")
+    if not data.get("nombre") or not nivel:
+        return jsonify({"error": "nombre y nivel son obligatorios"}), 400
+    if nivel not in NIVELES_PAQUETE:
+        return jsonify({"error": f"nivel debe ser uno de: {', '.join(NIVELES_PAQUETE)}"}), 400
+    precio = data.get("precio", 0)
+    if precio is not None and precio < 0:
+        return jsonify({"error": "precio no puede ser negativo"}), 400
+    if PaqueteRecuperacion.query.filter_by(evento_id=evento_id, nivel=nivel).first():
+        return jsonify({"error": f"Ya existe un paquete de nivel '{nivel}' para este evento"}), 409
 
     paquete = PaqueteRecuperacion(
         evento_id=evento_id,
-        nivel=data.get("nivel"),
+        nivel=nivel,
         nombre=data["nombre"],
         descripcion=data.get("descripcion"),
-        precio=data.get("precio", 0),
+        precio=precio,
         moneda=data.get("moneda", "MXN"),
         activo=data.get("activo", True),
     )
@@ -71,6 +81,15 @@ def actualizar_paquete(paquete_id):
     if error := _requiere_gestion_evento(Evento.query.get(paquete.evento_id)):
         return error
     data = request.get_json(force=True, silent=True) or {}
+    if "nivel" in data:
+        if data["nivel"] not in NIVELES_PAQUETE:
+            return jsonify({"error": f"nivel debe ser uno de: {', '.join(NIVELES_PAQUETE)}"}), 400
+        if data["nivel"] != paquete.nivel and PaqueteRecuperacion.query.filter_by(
+            evento_id=paquete.evento_id, nivel=data["nivel"]
+        ).first():
+            return jsonify({"error": f"Ya existe un paquete de nivel '{data['nivel']}' para este evento"}), 409
+    if data.get("precio") is not None and data["precio"] < 0:
+        return jsonify({"error": "precio no puede ser negativo"}), 400
     for campo in ("nivel", "nombre", "descripcion", "precio", "moneda", "activo"):
         if campo in data:
             setattr(paquete, campo, data[campo])
@@ -126,7 +145,7 @@ def _validar_referencias_cruzadas(evento_id, fecha_id, categoria_id, boleto_id, 
 @jwt_required()
 def crear_inscripcion():
     """Body: {evento_id, fecha_id, categoria_id, boleto_id, paquete_id?}
-    El estado queda en "pendiente" (a falta del módulo de pagos); si la
+    El estado queda en "pendiente_pago" (a falta del módulo de pagos); si la
     categoría ya llegó a su cupo, cae en "lista_espera" cuando la
     categoría lo permite, o se rechaza si no.
     """
@@ -161,17 +180,17 @@ def crear_inscripcion():
     ya_inscrita = Inscripcion.query.filter(
         Inscripcion.usuario_id == usuario.id,
         Inscripcion.categoria_id == categoria_id,
-        Inscripcion.estado != "cancelada",
+        Inscripcion.estado != "cancelado",
     ).first()
     if ya_inscrita:
         return jsonify({"error": "Ya tienes una inscripción activa en esta categoría"}), 409
 
     categoria = EventoCategoria.query.get(categoria_id)
-    estado = "pendiente"
+    estado = "pendiente_pago"
     if categoria.cupo_total is not None:
         activas = Inscripcion.query.filter(
             Inscripcion.categoria_id == categoria_id,
-            Inscripcion.estado.in_(("pendiente", "confirmada", "completada")),
+            Inscripcion.estado.in_(("pendiente_pago", "inscrito", "activo", "completado")),
         ).count()
         if activas >= categoria.cupo_total:
             if not categoria.permite_lista_espera:
@@ -220,10 +239,10 @@ def cancelar_inscripcion(inscripcion_id):
     inscripcion = Inscripcion.query.get_or_404(inscripcion_id)
     if usuario.rol != "admin" and inscripcion.usuario_id != usuario.id:
         return jsonify({"error": "No tienes acceso a esta inscripción"}), 403
-    if inscripcion.estado == "cancelada":
+    if inscripcion.estado == "cancelado":
         return jsonify({"error": "Esa inscripción ya estaba cancelada"}), 400
 
-    inscripcion.estado = "cancelada"
+    inscripcion.estado = "cancelado"
     inscripcion.cancelada_en = datetime.now(timezone.utc)
     db.session.commit()
 
@@ -234,7 +253,7 @@ def cancelar_inscripcion(inscripcion_id):
         .first()
     )
     if siguiente:
-        siguiente.estado = "pendiente"
+        siguiente.estado = "pendiente_pago"
         db.session.commit()
 
     return jsonify(inscripcion.to_dict()), 200
@@ -254,7 +273,7 @@ def cambiar_estado_inscripcion(inscripcion_id):
         return jsonify({"error": f"estado debe ser uno de: {', '.join(ESTADOS_INSCRIPCION)}"}), 400
 
     inscripcion.estado = nuevo_estado
-    if nuevo_estado == "cancelada":
+    if nuevo_estado == "cancelado":
         inscripcion.cancelada_en = datetime.now(timezone.utc)
     db.session.commit()
     return jsonify(inscripcion.to_dict()), 200
@@ -274,12 +293,21 @@ def registrar_resultado(inscripcion_id):
         inscripcion.asistencia_latitud = data.get("asistencia_latitud")
         inscripcion.asistencia_longitud = data.get("asistencia_longitud")
 
-    for campo in ("tiempo_oficial", "posicion_general", "posicion_categoria", "numero_participante"):
+    for campo in ("posicion_general", "posicion_categoria"):
+        if campo in data and data[campo] is not None and data[campo] <= 0:
+            return jsonify({"error": f"{campo} debe ser mayor a 0"}), 400
+
+    if "tiempo_oficial" in data:
+        try:
+            inscripcion.tiempo_oficial = parse_time(data["tiempo_oficial"])
+        except ValueError:
+            return jsonify({"error": "tiempo_oficial debe tener formato HH:MM:SS"}), 400
+    for campo in ("posicion_general", "posicion_categoria", "numero_participante"):
         if campo in data:
             setattr(inscripcion, campo, data[campo])
 
     if data.get("completada", False):
-        inscripcion.estado = "completada"
+        inscripcion.estado = "completado"
 
     db.session.commit()
     return jsonify(inscripcion.to_dict()), 200
@@ -306,13 +334,13 @@ def listar_inscripciones_de_evento(evento_id):
 @inscripciones_bp.route("/inscripciones/<int:inscripcion_id>/valoracion", methods=["POST"])
 @jwt_required()
 def valorar_evento(inscripcion_id):
-    """El usuario deja su reseña una vez que la inscripción quedó "completada".
+    """El usuario deja su reseña una vez que la inscripción quedó "completado".
     Si ya había valorado, se actualiza la reseña existente."""
     usuario = get_usuario_actual()
     inscripcion = Inscripcion.query.get_or_404(inscripcion_id)
     if inscripcion.usuario_id != usuario.id:
         return jsonify({"error": "No puedes valorar una inscripción que no es tuya"}), 403
-    if inscripcion.estado != "completada":
+    if inscripcion.estado != "completado":
         return jsonify({"error": "Solo puedes valorar un evento al que ya asististe"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
@@ -324,9 +352,9 @@ def valorar_evento(inscripcion_id):
     if calif_organizador is not None and not (1 <= int(calif_organizador) <= 5):
         return jsonify({"error": "calificacion_organizador debe ser de 1 a 5"}), 400
 
-    valoracion = ValoracionEvento.query.filter_by(inscripciones_id=inscripcion_id).first()
+    valoracion = ValoracionEvento.query.get(inscripcion_id)
     if not valoracion:
-        valoracion = ValoracionEvento(inscripciones_id=inscripcion_id)
+        valoracion = ValoracionEvento(inscripcion_id=inscripcion_id)
         db.session.add(valoracion)
 
     valoracion.calificacion_evento = calificacion
@@ -349,11 +377,11 @@ def valoraciones_de_evento(evento_id):
     return jsonify([v.to_dict() for v in valoraciones]), 200
 
 
-@inscripciones_bp.route("/valoraciones/<int:valoracion_id>/responder", methods=["PUT"])
+@inscripciones_bp.route("/valoraciones/<int:inscripcion_id>/responder", methods=["PUT"])
 @jwt_required()
-def responder_valoracion(valoracion_id):
+def responder_valoracion(inscripcion_id):
     """El organizador del evento (o un admin) responde públicamente a la reseña."""
-    valoracion = ValoracionEvento.query.get_or_404(valoracion_id)
+    valoracion = ValoracionEvento.query.get_or_404(inscripcion_id)
     if error := _requiere_gestion_evento(Evento.query.get(valoracion.inscripcion.evento_id)):
         return error
     data = request.get_json(force=True, silent=True) or {}

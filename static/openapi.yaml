@@ -723,7 +723,7 @@ paths:
               type: object
               required: [estado]
               properties:
-                estado: { type: string, enum: [pendiente, confirmada, lista_espera, cancelada, completada] }
+                estado: { type: string, enum: [pendiente_pago, inscrito, activo, lista_espera, completado, cancelado, no_asistio] }
       responses:
         "200": { description: Estado actualizado }
 

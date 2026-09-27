@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 
 from database import db
 
-# Tipos válidos para `preguntas.tipo`.
-TIPOS_PREGUNTA = ("opcion_unica", "opcion_multiple", "texto_libre", "escala")
+# Tipos válidos para `preguntas.tipo` (deben coincidir con el CHECK real de Neon).
+TIPOS_PREGUNTA = ("opcion_unica", "opcion_multiple", "escala", "texto", "numero", "si_no")
 
 
 class Cuestionario(db.Model):
@@ -44,7 +44,7 @@ class Pregunta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cuestionario_id = db.Column(db.Integer, db.ForeignKey("cuestionarios.id"), nullable=False)
     codigo = db.Column(db.String(50), nullable=False)
-    texto = db.Column(db.Text, nullable=False)
+    texto = db.Column(db.String(255), nullable=False)
     tipo = db.Column(db.String(20), nullable=False, default="opcion_unica")
     obligatoria = db.Column(db.Boolean, nullable=False, default=True)
     orden = db.Column(db.Integer, nullable=False, default=0)
@@ -78,7 +78,7 @@ class OpcionRespuesta(db.Model):
     # Si la pregunta es del tipo "¿qué deporte practicas?", la opción puede
     # apuntar directo al catálogo de deportes en vez de tener texto libre.
     deporte_id = db.Column(db.Integer, db.ForeignKey("deportes.id"), nullable=True)
-    codigo_id = db.Column(db.String(50), nullable=True)
+    codigo = db.Column(db.String(50), nullable=False)
     texto = db.Column(db.String(150), nullable=False)
     orden = db.Column(db.Integer, nullable=False, default=0)
 
@@ -89,26 +89,42 @@ class OpcionRespuesta(db.Model):
             "id": self.id,
             "pregunta_id": self.pregunta_id,
             "deporte_id": self.deporte_id,
-            "codigo_id": self.codigo_id,
+            "codigo": self.codigo,
             "texto": self.texto,
             "orden": self.orden,
         }
 
 
 class RespuestaUsuario(db.Model):
-    """Respuesta de un usuario a una pregunta del cuestionario (tabla `respuesta_usuario`)."""
+    """Respuesta de un usuario a una pregunta del cuestionario (tabla
+    `respuestas_usuario`). Neon exige que, si se manda `opcion_id`, sea
+    una opción que en verdad pertenezca a esa `pregunta_id` (FK compuesta),
+    y que cada respuesta tenga `opcion_id` o `respuesta_texto` (CHECK,
+    reforzado también en la ruta)."""
 
-    __tablename__ = "respuesta_usuario"
+    __tablename__ = "respuestas_usuario"
 
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     pregunta_id = db.Column(db.Integer, db.ForeignKey("preguntas.id"), nullable=False)
-    opcion_id = db.Column(db.Integer, db.ForeignKey("opciones_respuesta.id"), nullable=True)
-    respuesta_texto = db.Column(db.Text, nullable=True)  # para preguntas tipo texto_libre
+    opcion_id = db.Column(db.Integer, nullable=True)
+    respuesta_texto = db.Column(db.String(255), nullable=True)  # para preguntas tipo texto/numero
     respondida_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        db.ForeignKeyConstraint(
+            ["opcion_id", "pregunta_id"],
+            ["opciones_respuesta.id", "opciones_respuesta.pregunta_id"],
+        ),
+    )
+
     pregunta = db.relationship("Pregunta")
-    opcion = db.relationship("OpcionRespuesta")
+    opcion = db.relationship(
+        "OpcionRespuesta",
+        primaryjoin="RespuestaUsuario.opcion_id == OpcionRespuesta.id",
+        foreign_keys=[opcion_id],
+        viewonly=True,
+    )
 
     def to_dict(self):
         return {

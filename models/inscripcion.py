@@ -2,22 +2,23 @@ from datetime import datetime, timezone
 
 from database import db
 
-# Valores válidos (ver docs/entidades_completas.md).
-ESTADOS_INSCRIPCION = ("pendiente", "confirmada", "lista_espera", "cancelada", "completada")
+# Valores válidos (deben coincidir con los CHECK reales de Neon).
+ESTADOS_INSCRIPCION = ("pendiente_pago", "inscrito", "activo", "lista_espera", "completado", "cancelado", "no_asistio")
+NIVELES_PAQUETE = ("basico", "medio", "premium")
 
 
 class PaqueteRecuperacion(db.Model):
-    """Tabla `paquete_recuperacion`: paquete opcional que un usuario puede
+    """Tabla `paquetes_recuperacion`: paquete opcional que un usuario puede
     agregar a su inscripción (ej. "kit básico" / "kit premium" con playera,
     medalla, etc.). `paquete_items` (liga a variantes de producto de la
     tienda) queda pendiente hasta construir el módulo de tienda.
     """
 
-    __tablename__ = "paquete_recuperacion"
+    __tablename__ = "paquetes_recuperacion"
 
     id = db.Column(db.Integer, primary_key=True)
     evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), nullable=False)
-    nivel = db.Column(db.String(30), nullable=True)  # ej. "basico", "premium"
+    nivel = db.Column(db.String(20), nullable=False)  # ver NIVELES_PAQUETE
     nombre = db.Column(db.String(100), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     precio = db.Column(db.Numeric(10, 2), nullable=False, default=0)
@@ -53,16 +54,16 @@ class Inscripcion(db.Model):
     fecha_id = db.Column(db.Integer, db.ForeignKey("evento_fechas.id"), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey("evento_categorias.id"), nullable=False)
     boleto_id = db.Column(db.Integer, db.ForeignKey("evento_boletos.id"), nullable=False)
-    paquete_id = db.Column(db.Integer, db.ForeignKey("paquete_recuperacion.id"), nullable=True)
+    paquete_id = db.Column(db.Integer, db.ForeignKey("paquetes_recuperacion.id"), nullable=True)
 
-    estado = db.Column(db.String(20), nullable=False, default="pendiente")
+    estado = db.Column(db.String(20), nullable=False, default="pendiente_pago")
     numero_participante = db.Column(db.String(20), nullable=True)  # "número de corredor"/bib
     inscrita_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     cancelada_en = db.Column(db.DateTime, nullable=True)
     asistio_en = db.Column(db.DateTime, nullable=True)
     asistencia_latitud = db.Column(db.Numeric(9, 6), nullable=True)
     asistencia_longitud = db.Column(db.Numeric(9, 6), nullable=True)
-    tiempo_oficial = db.Column(db.String(20), nullable=True)  # ej. "01:23:45"
+    tiempo_oficial = db.Column(db.Time, nullable=True)  # ej. time(1, 23, 45)
     posicion_general = db.Column(db.Integer, nullable=True)
     posicion_categoria = db.Column(db.Integer, nullable=True)
 
@@ -85,7 +86,7 @@ class Inscripcion(db.Model):
             "inscrita_en": self.inscrita_en.isoformat() if self.inscrita_en else None,
             "cancelada_en": self.cancelada_en.isoformat() if self.cancelada_en else None,
             "asistio_en": self.asistio_en.isoformat() if self.asistio_en else None,
-            "tiempo_oficial": self.tiempo_oficial,
+            "tiempo_oficial": self.tiempo_oficial.isoformat() if self.tiempo_oficial else None,
             "posicion_general": self.posicion_general,
             "posicion_categoria": self.posicion_categoria,
         }
@@ -99,14 +100,14 @@ class Inscripcion(db.Model):
 
 class ValoracionEvento(db.Model):
     """Tabla `valoraciones_evento`: reseña que deja el usuario tras asistir.
-    Se limita a una valoración por inscripción a nivel de aplicación
-    (si ya existe una, se actualiza en vez de duplicarse).
+    PK real en Neon: `inscripcion_id` (no tiene `id` propio, es 1-a-1 con
+    la inscripción, así que solo puede existir una valoración por
+    inscripción — ya no hace falta limitarlo "a nivel de aplicación").
     """
 
     __tablename__ = "valoraciones_evento"
 
-    id = db.Column(db.Integer, primary_key=True)
-    inscripciones_id = db.Column(db.Integer, db.ForeignKey("inscripciones.id"), nullable=False)
+    inscripcion_id = db.Column(db.Integer, db.ForeignKey("inscripciones.id"), primary_key=True)
     calificacion_evento = db.Column(db.Integer, nullable=False)  # 1-5
     calificacion_organizador = db.Column(db.Integer, nullable=True)  # 1-5
     comentario = db.Column(db.Text, nullable=True)
@@ -118,8 +119,7 @@ class ValoracionEvento(db.Model):
 
     def to_dict(self):
         return {
-            "id": self.id,
-            "inscripciones_id": self.inscripciones_id,
+            "inscripcion_id": self.inscripcion_id,
             "usuario_id": self.inscripcion.usuario_id if self.inscripcion else None,
             "evento_id": self.inscripcion.evento_id if self.inscripcion else None,
             "calificacion_evento": self.calificacion_evento,

@@ -77,6 +77,8 @@ def crear_pregunta(cuestionario_id):
         return jsonify({"error": "codigo y texto son obligatorios"}), 400
     if tipo not in TIPOS_PREGUNTA:
         return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_PREGUNTA)}"}), 400
+    if Pregunta.query.filter_by(cuestionario_id=cuestionario_id, codigo=codigo).first():
+        return jsonify({"error": "Ya existe una pregunta con ese código en este cuestionario"}), 409
 
     pregunta = Pregunta(
         cuestionario_id=cuestionario_id,
@@ -88,15 +90,24 @@ def crear_pregunta(cuestionario_id):
         activa=data.get("activa", True),
     )
     db.session.add(pregunta)
-    db.session.commit()
+    db.session.flush()
 
     # Atajo: permite mandar las opciones junto con la pregunta.
+    codigos_usados = set()
     for op in data.get("opciones", []):
+        codigo_opcion = op.get("codigo")
+        if not codigo_opcion or not op.get("texto"):
+            db.session.rollback()
+            return jsonify({"error": "cada opción necesita codigo y texto"}), 400
+        if codigo_opcion in codigos_usados:
+            db.session.rollback()
+            return jsonify({"error": f"codigo '{codigo_opcion}' repetido entre las opciones"}), 400
+        codigos_usados.add(codigo_opcion)
         db.session.add(
             OpcionRespuesta(
                 pregunta_id=pregunta.id,
                 deporte_id=op.get("deporte_id"),
-                codigo_id=op.get("codigo_id"),
+                codigo=codigo_opcion,
                 texto=op["texto"],
                 orden=op.get("orden", 0),
             )
@@ -114,6 +125,9 @@ def actualizar_pregunta(pregunta_id):
 
     if "tipo" in data and data["tipo"] not in TIPOS_PREGUNTA:
         return jsonify({"error": f"tipo debe ser uno de: {', '.join(TIPOS_PREGUNTA)}"}), 400
+    if "codigo" in data and data["codigo"] != pregunta.codigo:
+        if Pregunta.query.filter_by(cuestionario_id=pregunta.cuestionario_id, codigo=data["codigo"]).first():
+            return jsonify({"error": "Ya existe una pregunta con ese código en este cuestionario"}), 409
 
     for campo in ("codigo", "texto", "tipo", "obligatoria", "orden", "activa"):
         if campo in data:
@@ -136,13 +150,16 @@ def eliminar_pregunta(pregunta_id):
 def agregar_opcion(pregunta_id):
     Pregunta.query.get_or_404(pregunta_id)
     data = request.get_json(force=True, silent=True) or {}
-    if not data.get("texto"):
-        return jsonify({"error": "texto es obligatorio"}), 400
+    codigo = data.get("codigo")
+    if not data.get("texto") or not codigo:
+        return jsonify({"error": "codigo y texto son obligatorios"}), 400
+    if OpcionRespuesta.query.filter_by(pregunta_id=pregunta_id, codigo=codigo).first():
+        return jsonify({"error": "Ya existe una opción con ese código en esta pregunta"}), 409
 
     opcion = OpcionRespuesta(
         pregunta_id=pregunta_id,
         deporte_id=data.get("deporte_id"),
-        codigo_id=data.get("codigo_id"),
+        codigo=codigo,
         texto=data["texto"],
         orden=data.get("orden", 0),
     )
@@ -166,7 +183,10 @@ def eliminar_opcion(opcion_id):
 @jwt_required()
 def responder_cuestionario(codigo):
     """Body: {"respuestas": [{"pregunta_id": 1, "opcion_id": 3}, {"pregunta_id": 2, "respuesta_texto": "..."}]}
-    Si el usuario ya había respondido una pregunta, se sobreescribe (permite editar el registro).
+    Para una pregunta de tipo "opcion_multiple" se pueden mandar varias
+    entradas con el mismo pregunta_id (una por cada opción elegida).
+    Cada llamada reemplaza por completo las respuestas previas del usuario
+    para las preguntas incluidas en el body (permite editar el registro).
     """
     cuestionario = Cuestionario.query.filter_by(codigo=codigo, activo=True).first()
     if not cuestionario:
@@ -178,30 +198,56 @@ def responder_cuestionario(codigo):
     if not isinstance(respuestas, list) or not respuestas:
         return jsonify({"error": "respuestas debe ser una lista con al menos un elemento"}), 400
 
-    ids_preguntas_validas = {p.id for p in cuestionario.preguntas}
-    guardadas = []
+    preguntas_por_id = {p.id: p for p in cuestionario.preguntas}
 
+    # Agrupa por pregunta_id: una pregunta de opción múltiple puede traer
+    # varias entradas (una por opción elegida).
+    por_pregunta = {}
     for r in respuestas:
         pregunta_id = r.get("pregunta_id")
-        if pregunta_id not in ids_preguntas_validas:
+        if pregunta_id not in preguntas_por_id:
             return jsonify({"error": f"pregunta_id {pregunta_id} no pertenece a este cuestionario"}), 400
+        por_pregunta.setdefault(pregunta_id, []).append(r)
 
-        existente = RespuestaUsuario.query.filter_by(
-            usuario_id=usuario.id, pregunta_id=pregunta_id
-        ).first()
-        if existente:
-            existente.opcion_id = r.get("opcion_id")
-            existente.respuesta_texto = r.get("respuesta_texto")
-            guardadas.append(existente)
-        else:
-            nueva = RespuestaUsuario(
+    # Valida todo antes de tocar la base (para no dejar cambios a medias).
+    filas_por_pregunta = {}
+    for pregunta_id, items in por_pregunta.items():
+        pregunta = preguntas_por_id[pregunta_id]
+        if len(items) > 1 and pregunta.tipo != "opcion_multiple":
+            return jsonify({"error": f"pregunta_id {pregunta_id} no acepta múltiples respuestas"}), 400
+        filas = []
+        for r in items:
+            opcion_id = r.get("opcion_id")
+            respuesta_texto = r.get("respuesta_texto")
+            # CHECK real de `respuestas_usuario`: opcion_id o respuesta_texto.
+            if opcion_id is None and not respuesta_texto:
+                return jsonify(
+                    {"error": f"pregunta_id {pregunta_id}: se requiere opcion_id o respuesta_texto"}
+                ), 400
+            # FK compuesta real: la opción debe pertenecer a esa pregunta.
+            if opcion_id is not None and not OpcionRespuesta.query.filter_by(
+                id=opcion_id, pregunta_id=pregunta_id
+            ).first():
+                return jsonify(
+                    {"error": f"opcion_id {opcion_id} no pertenece a la pregunta {pregunta_id}"}
+                ), 400
+            filas.append((opcion_id, respuesta_texto))
+        filas_por_pregunta[pregunta_id] = filas
+
+    guardadas = []
+    for pregunta_id, filas in filas_por_pregunta.items():
+        # Reemplaza cualquier respuesta previa de esta pregunta (permite
+        # editar, y evita duplicados si antes había otra selección).
+        RespuestaUsuario.query.filter_by(usuario_id=usuario.id, pregunta_id=pregunta_id).delete()
+        for opcion_id, respuesta_texto in filas:
+            fila = RespuestaUsuario(
                 usuario_id=usuario.id,
                 pregunta_id=pregunta_id,
-                opcion_id=r.get("opcion_id"),
-                respuesta_texto=r.get("respuesta_texto"),
+                opcion_id=opcion_id,
+                respuesta_texto=respuesta_texto,
             )
-            db.session.add(nueva)
-            guardadas.append(nueva)
+            db.session.add(fila)
+            guardadas.append(fila)
 
     db.session.commit()
     return jsonify([g.to_dict() for g in guardadas]), 201
