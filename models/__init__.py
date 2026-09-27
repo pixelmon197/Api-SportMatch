@@ -37,7 +37,7 @@ from models.evento import (
 )
 
 # Fase 3 — Rutas
-from models.ruta import Ruta, RutaPunto, EventoRuta, TIPOS_PUNTO_RUTA
+from models.ruta import Ruta, RutaPunto, EventoRuta, TIPOS_PUNTO_RUTA, DIFICULTADES_RUTA
 
 # Fase 3 — Inscripciones y valoraciones
 from models.inscripcion import (
@@ -106,6 +106,7 @@ __all__ = [
     "RutaPunto",
     "EventoRuta",
     "TIPOS_PUNTO_RUTA",
+    "DIFICULTADES_RUTA",
     "PaqueteRecuperacion",
     "Inscripcion",
     "ValoracionEvento",

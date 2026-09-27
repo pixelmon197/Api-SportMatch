@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 
 from database import db
 
-TIPOS_PUNTO_RUTA = ("inicio", "fin", "control", "paso")
+# Valores válidos (deben coincidir con los CHECK reales de Neon).
+TIPOS_PUNTO_RUTA = ("inicio", "meta", "hidratacion", "punto_interes", "mirador", "peligro")
+DIFICULTADES_RUTA = ("facil", "moderada", "dificil", "extrema")
 
 
 class Ruta(db.Model):
@@ -19,8 +21,8 @@ class Ruta(db.Model):
     dificultad = db.Column(db.String(20), nullable=True)
     nombre = db.Column(db.String(150), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
-    distancia_m = db.Column(db.Numeric(10, 2), nullable=True)
-    desnivel_positivo_m = db.Column(db.Numeric(10, 2), nullable=True)
+    distancia_m = db.Column(db.Integer, nullable=True)
+    desnivel_positivo_m = db.Column(db.Integer, nullable=True)
     es_publica = db.Column(db.Boolean, nullable=False, default=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     eliminado_en = db.Column(db.DateTime, nullable=True)
@@ -38,10 +40,8 @@ class Ruta(db.Model):
             "dificultad": self.dificultad,
             "nombre": self.nombre,
             "descripcion": self.descripcion,
-            "distancia_m": float(self.distancia_m) if self.distancia_m is not None else None,
-            "desnivel_positivo_m": float(self.desnivel_positivo_m)
-            if self.desnivel_positivo_m is not None
-            else None,
+            "distancia_m": self.distancia_m,
+            "desnivel_positivo_m": self.desnivel_positivo_m,
             "es_publica": self.es_publica,
             "creado_en": self.creado_en.isoformat() if self.creado_en else None,
         }
@@ -55,7 +55,7 @@ class RutaPunto(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     ruta_id = db.Column(db.Integer, db.ForeignKey("rutas.id"), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False, default="paso")
+    tipo = db.Column(db.String(20), nullable=False, default="punto_interes")
     orden = db.Column(db.Integer, nullable=False, default=0)
     nombre = db.Column(db.String(100), nullable=True)
     latitud = db.Column(db.Numeric(9, 6), nullable=False)
@@ -75,19 +75,32 @@ class RutaPunto(db.Model):
 
 
 class EventoRuta(db.Model):
-    """Liga una ruta a una categoría de evento (tabla `evento_rutas`)."""
+    """Liga una ruta a un evento (y, opcionalmente, a una categoría
+    específica de ese evento). Tabla `evento_rutas`: PK compuesta real en
+    Neon (evento_id + ruta_id), sin columna `id` propia. `categoria_id` es
+    opcional pero, cuando se manda, Neon exige que esa categoría
+    pertenezca al mismo evento (FK compuesta categoria_id+evento_id).
+    """
 
     __tablename__ = "evento_rutas"
 
-    id = db.Column(db.Integer, primary_key=True)
-    ruta_id = db.Column(db.Integer, db.ForeignKey("rutas.id"), nullable=False)
-    categoria_id = db.Column(db.Integer, db.ForeignKey("evento_categorias.id"), nullable=False)
+    evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id"), primary_key=True)
+    ruta_id = db.Column(db.Integer, db.ForeignKey("rutas.id"), primary_key=True)
+    categoria_id = db.Column(db.Integer, nullable=True)
+
+    __table_args__ = (
+        db.ForeignKeyConstraint(
+            ["categoria_id", "evento_id"],
+            ["evento_categorias.id", "evento_categorias.evento_id"],
+        ),
+    )
 
     ruta = db.relationship("Ruta")
 
     def to_dict(self):
         return {
-            "id": self.id,
+            "evento_id": self.evento_id,
+            "ruta_id": self.ruta_id,
             "categoria_id": self.categoria_id,
             "ruta": self.ruta.to_dict() if self.ruta else None,
         }
