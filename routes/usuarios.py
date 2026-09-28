@@ -4,10 +4,11 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from database import db
-from models import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
+from models import Ciudad, Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from utils.auth import admin_required, get_usuario_actual
 from utils.auditoria import registrar_auditoria
 from utils.fechas import parse_date
+from utils.validaciones import validar_telefono
 
 usuarios_bp = Blueprint("usuarios", __name__, url_prefix="/api/usuarios")
 
@@ -23,6 +24,14 @@ def actualizar_perfil_propio():
         return jsonify({"error": "Usuario no encontrado"}), 404
 
     data = request.get_json(force=True, silent=True) or {}
+    if error := validar_telefono(data.get("telefono")):
+        return jsonify({"error": error}), 400
+    # Neon tiene un CHECK con el catálogo de `sexo`; se valida antes para
+    # responder 400 en vez de un error crudo de base de datos.
+    if data.get("sexo") is not None and data["sexo"] not in SEXOS_VALIDOS:
+        return jsonify({"error": f"sexo debe ser uno de: {', '.join(SEXOS_VALIDOS)}"}), 400
+    if data.get("ciudad_id") is not None and not Ciudad.query.get(data["ciudad_id"]):
+        return jsonify({"error": "ciudad_id no corresponde a una ciudad existente"}), 400
     for campo in ("nombre_completo", "telefono", "sexo", "idioma", "zona_horaria", "ciudad_id"):
         if campo in data:
             setattr(usuario, campo, data[campo])

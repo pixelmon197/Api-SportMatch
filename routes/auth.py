@@ -4,9 +4,10 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
 from database import db
-from models import Usuario, ROLES_VALIDOS, SEXOS_VALIDOS, TokenVerificacion
+from models import Ciudad, Usuario, ROLES_VALIDOS, SEXOS_VALIDOS, TokenVerificacion
 from utils.auth import get_usuario_actual
 from utils.fechas import parse_date
+from utils.validaciones import validar_telefono
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -53,6 +54,14 @@ def register():
         return jsonify(
             {"error": f"sexo debe ser uno de: {', '.join(SEXOS_VALIDOS)}"}
         ), 400
+
+    if error := validar_telefono(data.get("telefono")):
+        return jsonify({"error": error}), 400
+
+    # `usuarios.ciudad_id` es FK a `ciudades`: un id inexistente (p. ej. 0)
+    # haría fallar el INSERT en Neon, así que se valida antes.
+    if data.get("ciudad_id") is not None and not Ciudad.query.get(data["ciudad_id"]):
+        return jsonify({"error": "ciudad_id no corresponde a una ciudad existente"}), 400
 
     try:
         fecha_nacimiento = parse_date(fecha_nacimiento_raw)

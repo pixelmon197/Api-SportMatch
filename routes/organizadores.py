@@ -14,6 +14,7 @@ from models import (
     TIPOS_DOCUMENTO_VALIDACION,
 )
 from utils.auth import admin_required, get_usuario_actual, puede_gestionar_organizador
+from utils.validaciones import validar_telefono
 from utils.auditoria import registrar_auditoria
 
 organizadores_bp = Blueprint("organizadores", __name__, url_prefix="/api/organizadores")
@@ -60,6 +61,8 @@ def crear_organizador():
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("nombre_comercial"):
         return jsonify({"error": "nombre_comercial es obligatorio"}), 400
+    if error := validar_telefono(data.get("telefono_contacto"), "telefono_contacto"):
+        return jsonify({"error": error}), 400
 
     organizador = Organizador(
         usuario_id=usuario.id,
@@ -85,6 +88,8 @@ def actualizar_organizador(organizador_id):
         return error
     organizador = Organizador.query.get_or_404(organizador_id)
     data = request.get_json(force=True, silent=True) or {}
+    if error := validar_telefono(data.get("telefono_contacto"), "telefono_contacto"):
+        return jsonify({"error": error}), 400
     for campo in ("nombre_comercial", "descripcion", "correo_contacto", "telefono_contacto", "ciudad_id"):
         if campo in data:
             setattr(organizador, campo, data[campo])

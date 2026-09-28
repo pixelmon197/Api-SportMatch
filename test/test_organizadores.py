@@ -230,4 +230,14 @@ assert r.status_code == 200
 assert r.get_json()["organizador"]["estado_validacion"] == "rechazada"
 assert r.get_json()["solicitud"]["estado"] == "rechazada"
 
+# 15) telefono_contacto con letras -> 400 (solo numeros); valido -> 201/200
+r = client.post("/api/organizadores", json={"nombre_comercial": "Tercero", "telefono_contacto": "55-abc"}, headers=H_ADMIN)
+show("CREAR ORGANIZADOR (telefono invalido)", r)
+assert r.status_code == 400
+r = client.put(f"/api/organizadores/{organizador_id}", json={"telefono_contacto": "5511223344"}, headers=H_ANA)
+show("ACTUALIZAR ORGANIZADOR (telefono valido)", r)
+assert r.status_code == 200 and r.get_json()["telefono_contacto"] == "5511223344"
+r = client.put(f"/api/organizadores/{organizador_id}", json={"telefono_contacto": "x1"}, headers=H_ANA)
+assert r.status_code == 400
+
 print("\nTODAS LAS PRUEBAS DE ORGANIZADORES PASARON")

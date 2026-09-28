@@ -18,7 +18,10 @@ import sqlite3
 DDL = """
 CREATE TABLE ciudades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre TEXT NOT NULL
+    nombre TEXT NOT NULL,
+    estado TEXT NOT NULL DEFAULT 'México',
+    pais TEXT NOT NULL DEFAULT 'México',
+    codigo_postal TEXT
 );
 
 CREATE TABLE usuarios (
@@ -167,3 +170,37 @@ show("REGISTER (sin fecha_nacimiento)", r)
 assert r.status_code == 400
 
 print("\nTODAS LAS PRUEBAS ADICIONALES PASARON")
+
+# ===== Correcciones de la revisión del swagger =====
+base = {"nombre_completo": "Marco Aurelio", "nombre_usuario": "aurelio", "correo": "aurelio@correo.com",
+        "password": "SilverTrident1", "fecha_nacimiento": "2000-05-10", "sexo": "masculino"}
+
+# 11) telefono con letras/símbolos -> 400
+for malo in ("55-1234-5678", "abc12345678", "72265", "+525512345678"):
+    r = client.post("/api/auth/register", json={**base, "telefono": malo})
+    assert r.status_code == 400, (malo, r.get_json())
+show("REGISTER (telefono invalido)", r)
+
+# 12) ciudad_id inexistente (el 0 que trae el swagger por defecto) -> 400, no error de FK
+r = client.post("/api/auth/register", json={**base, "telefono": "5512345678", "ciudad_id": 0})
+show("REGISTER (ciudad_id=0)", r)
+assert r.status_code == 400
+
+# 13) telefono numerico valido -> 201 (se conserva como texto, con ceros a la izquierda)
+r = client.post("/api/auth/register", json={**base, "telefono": "0155123456"})
+show("REGISTER (telefono valido con cero inicial)", r)
+assert r.status_code == 201, r.get_json()
+assert r.get_json()["usuario"]["telefono"] == "0155123456"
+token_aurelio = r.get_json()["access_token"]
+H = {"Authorization": f"Bearer {token_aurelio}"}
+
+# 14) PUT /usuarios/me: telefono y sexo invalidos -> 400
+r = client.put("/api/usuarios/me", json={"telefono": "12ab"}, headers=H)
+assert r.status_code == 400, r.get_json()
+r = client.put("/api/usuarios/me", json={"sexo": "no-valido"}, headers=H)
+assert r.status_code == 400, r.get_json()
+r = client.put("/api/usuarios/me", json={"telefono": "5598765432", "sexo": "otro"}, headers=H)
+show("PUT /usuarios/me (valido)", r)
+assert r.status_code == 200 and r.get_json()["telefono"] == "5598765432"
+
+print("\nTODAS LAS PRUEBAS DE LA REVISION DEL SWAGGER (auth/usuarios) PASARON")

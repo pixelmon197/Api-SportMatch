@@ -26,7 +26,7 @@ components:
         nombre_usuario: { type: string, example: "anaperez" }
         rol: { type: string, enum: [usuario, organizador, administrador], example: "usuario" }
         estado_cuenta: { type: string, enum: [pendiente_verificacion, activa, suspendida, eliminada], example: "activa" }
-        telefono: { type: string, example: "5512345678" }
+        telefono: { type: string, pattern: '^[0-9]{7,15}$', example: "5512345678" }
         ciudad: { type: object, nullable: true }
         creado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
     Deporte:
@@ -65,19 +65,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nombre_completo, nombre_usuario, correo, password]
+              required: [nombre_completo, nombre_usuario, correo, password, fecha_nacimiento, sexo]
               properties:
                 nombre_completo: { type: string, example: "Ana Pérez" }
-                nombre_usuario: { type: string, example: "anaperez" }
+                nombre_usuario: { type: string, maxLength: 30, example: "anaperez" }
                 correo: { type: string, example: "ana@correo.com" }
                 password: { type: string, example: "MiClave123!" }
-                telefono: { type: string }
-                sexo: { type: string, enum: [masculino, femenino, otro, prefiero_no_decir] }
+                telefono: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678", description: "Solo números (7 a 15 dígitos). Se guarda como texto para no perder ceros a la izquierda." }
+                sexo: { type: string, enum: [masculino, femenino, otro, prefiero_no_decir], example: "femenino" }
                 fecha_nacimiento: { type: string, format: date, example: "2000-05-10" }
-                ciudad_id: { type: integer }
+                ciudad_id: { type: integer, minimum: 1, example: 1, description: "Debe ser el id de una ciudad existente." }
       responses:
         "201": { description: Usuario creado, regresa access_token + usuario }
-        "400": { description: Campos faltantes o inválidos (sexo, fecha_nacimiento) }
+        "400": { description: Campos faltantes o inválidos (sexo, fecha_nacimiento, telefono, ciudad_id) }
         "409": { description: Correo o nombre de usuario ya existen }
 
   /api/auth/login:
@@ -520,7 +520,7 @@ paths:
       responses:
         "200": { description: Lista paginada de eventos }
     post:
-      summary: Crear un evento, opcionalmente con deportes/requisitos/sedes/fechas/categorías+boletos anidados (solo admin)
+      summary: Crear un evento, opcionalmente con deportes/requisitos/sedes/fechas/categorías+boletos anidados (admin, o miembro de un organizador aprobado)
       tags: [Eventos]
       requestBody:
         required: true
@@ -528,41 +528,62 @@ paths:
           application/json:
             schema:
               type: object
-              required: [titulo, tipo]
+              required: [titulo, tipo, organizador_id]
               properties:
-                titulo: { type: string }
-                tipo: { type: string, example: "carrera" }
-                dificultad: { type: string, enum: [principiante, intermedio, avanzado, elite] }
-                descripcion: { type: string }
-                deportes: { type: array, items: { type: integer } }
+                organizador_id: { type: integer, minimum: 1, example: 1, description: "Obligatorio: todo evento pertenece a un organizador existente. Si quien crea no es admin, debe ser miembro de ese organizador y este debe estar aprobado." }
+                titulo: { type: string, example: "5K Nocturna" }
+                tipo: { type: string, enum: [carrera, ruta, torneo, liga, entrenamiento, experiencia_grupal], example: "carrera" }
+                slug: { type: string, example: "5k-nocturna", description: "Opcional; si se omite se genera a partir del título." }
+                dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
+                descripcion: { type: string, example: "Carrera nocturna por el centro de la ciudad" }
+                edad_minima: { type: integer, minimum: 0, example: 12 }
+                es_publico: { type: boolean, example: true }
+                deportes: { type: array, items: { type: integer, example: 1 } }
                 requisitos:
                   type: array
-                  items: { type: object, properties: { descripcion: { type: string }, orden: { type: integer } } }
+                  items: { type: object, properties: { descripcion: { type: string, example: "Certificado médico" }, orden: { type: integer, example: 1 } } }
                 sedes:
                   type: array
                   items:
                     type: object
+                    required: [nombre]
                     properties:
-                      nombre: { type: string }
-                      ciudad_id: { type: integer }
-                      latitud: { type: number }
-                      longitud: { type: number }
+                      tipo: { type: string, enum: [salida, meta, punto_encuentro, entrega_kit], example: "salida", description: "Si se omite, se usa punto_encuentro." }
+                      nombre: { type: string, example: "Parque Central" }
+                      direccion: { type: string, example: "Av. Principal 123" }
+                      ciudad_id: { type: integer, minimum: 1, example: 1 }
+                      latitud: { type: number, example: 19.2826 }
+                      longitud: { type: number, example: -99.6557 }
                 fechas:
                   type: array
-                  items: { type: object, properties: { inicia_en: { type: string, format: date-time }, termina_en: { type: string, format: date-time } } }
+                  items: { type: object, required: [inicia_en], properties: { inicia_en: { type: string, format: date-time, example: "2026-11-15T19:00:00" }, termina_en: { type: string, format: date-time, example: "2026-11-15T22:00:00" } } }
                 categorias:
                   type: array
                   items:
                     type: object
+                    required: [nombre]
                     properties:
-                      nombre: { type: string }
-                      distancia_km: { type: number }
-                      cupo_total: { type: integer }
+                      nombre: { type: string, example: "5K Varonil" }
+                      distancia_km: { type: number, exclusiveMinimum: 0, example: 5 }
+                      edad_minima: { type: integer, minimum: 0, example: 18 }
+                      edad_maxima: { type: integer, example: 45, description: "No puede ser menor que edad_minima." }
+                      cupo_total: { type: integer, minimum: 1, example: 100 }
+                      permite_lista_espera: { type: boolean, example: false }
                       boletos:
                         type: array
-                        items: { type: object, properties: { tipo: { type: string }, precio: { type: number } } }
+                        items:
+                          type: object
+                          properties:
+                            tipo: { type: string, enum: [general, preventa, estudiante, grupal], example: "general" }
+                            precio: { type: number, minimum: 0, example: 250 }
+                            moneda: { type: string, example: "MXN" }
+                            disponible_desde: { type: string, format: date-time, example: "2026-09-01T00:00:00" }
+                            disponible_hasta: { type: string, format: date-time, example: "2026-11-10T23:59:59", description: "Debe ser posterior a disponible_desde." }
+                            cantidad_maxima: { type: integer, example: 100 }
       responses:
         "201": { description: Evento creado (borrador) con todo lo anidado }
+        "400": { description: Faltan campos u obtienen valores inválidos (tipo, dificultad, organizador_id, sedes/categorías/boletos) }
+        "403": { description: No perteneces a ese organizador, o el organizador todavía no está aprobado }
 
   /api/eventos/{evento_id}:
     get:
@@ -570,21 +591,21 @@ paths:
       tags: [Eventos]
       security: []
       parameters:
-        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "200": { description: Evento }
     put:
-      summary: Actualizar un evento, incl. cambiar `estado` (borrador/publicado/cancelado/finalizado) (solo admin)
+      summary: Actualizar un evento, incl. cambiar `estado` (borrador/en_revision/publicado/cancelado/finalizado) (admin o miembro del organizador dueño)
       tags: [Eventos]
       parameters:
-        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "200": { description: Evento actualizado }
     delete:
-      summary: Eliminar un evento (borrado suave, solo admin)
+      summary: Eliminar un evento (borrado suave, queda cancelado; admin o miembro del organizador dueño)
       tags: [Eventos]
       parameters:
-        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "200": { description: Evento marcado como cancelado/eliminado }
 
@@ -594,27 +615,292 @@ paths:
       tags: [Eventos]
       security: []
       parameters:
-        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: slug, in: path, required: true, schema: { type: string, example: "5k-nocturna" } }
       responses:
         "200": { description: Evento }
 
-  /api/eventos/{evento_id}/categorias:
+  /api/eventos/{evento_id}/deportes:
     post:
-      summary: Agregar una categoría a un evento existente (solo admin)
+      summary: Asociar un deporte a un evento (admin o miembro del organizador dueño)
       tags: [Eventos]
       parameters:
-        - { name: evento_id, in: path, required: true, schema: { type: integer } }
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deporte_id]
+              properties:
+                deporte_id: { type: integer, example: 1 }
+      responses:
+        "201": { description: Deporte asociado }
+        "400": { description: deporte_id inválido }
+        "409": { description: Ese deporte ya está asociado al evento }
+
+  /api/eventos/{evento_id}/deportes/{deporte_id}:
+    delete:
+      summary: Quitar un deporte de un evento
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+        - { name: deporte_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Deporte quitado }
+
+  /api/eventos/{evento_id}/requisitos:
+    post:
+      summary: Agregar un requisito a un evento (admin o miembro del organizador dueño)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [descripcion]
+              properties:
+                descripcion: { type: string, example: "Certificado médico vigente" }
+                orden: { type: integer, example: 1 }
+      responses:
+        "201": { description: Requisito creado }
+        "400": { description: descripcion es obligatoria }
+
+  /api/eventos/requisitos/{requisito_id}:
+    put:
+      summary: Editar un requisito
+      tags: [Eventos]
+      parameters:
+        - { name: requisito_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                descripcion: { type: string, example: "Certificado médico vigente" }
+                orden: { type: integer, example: 2 }
+      responses:
+        "200": { description: Requisito actualizado }
+    delete:
+      summary: Eliminar un requisito
+      tags: [Eventos]
+      parameters:
+        - { name: requisito_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Requisito eliminado }
+
+  /api/eventos/{evento_id}/sedes:
+    post:
+      summary: Agregar una sede a un evento (admin o miembro del organizador dueño)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                tipo: { type: string, enum: [salida, meta, punto_encuentro, entrega_kit], example: "salida", description: "Si se omite, se usa punto_encuentro." }
+                nombre: { type: string, example: "Parque Central" }
+                direccion: { type: string, example: "Av. Principal 123" }
+                ciudad_id: { type: integer, minimum: 1, example: 1 }
+                latitud: { type: number, example: 19.2826 }
+                longitud: { type: number, example: -99.6557 }
+      responses:
+        "201": { description: Sede creada }
+        "400": { description: nombre faltante o tipo inválido }
+
+  /api/eventos/sedes/{sede_id}:
+    put:
+      summary: Editar una sede
+      tags: [Eventos]
+      parameters:
+        - { name: sede_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tipo: { type: string, enum: [salida, meta, punto_encuentro, entrega_kit], example: "meta" }
+                nombre: { type: string, example: "Arco de meta" }
+                direccion: { type: string, example: "Av. Principal 456" }
+                ciudad_id: { type: integer, minimum: 1, example: 1 }
+                latitud: { type: number, example: 19.2826 }
+                longitud: { type: number, example: -99.6557 }
+      responses:
+        "200": { description: Sede actualizada }
+        "400": { description: tipo inválido }
+    delete:
+      summary: Eliminar una sede
+      tags: [Eventos]
+      parameters:
+        - { name: sede_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Sede eliminada }
+
+  /api/eventos/{evento_id}/fechas:
+    post:
+      summary: Agregar una fecha a un evento (admin o miembro del organizador dueño)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inicia_en]
+              properties:
+                inicia_en: { type: string, format: date-time, example: "2026-11-15T19:00:00" }
+                termina_en: { type: string, format: date-time, example: "2026-11-15T22:00:00", description: "Debe ser posterior a inicia_en." }
+      responses:
+        "201": { description: Fecha creada }
+        "400": { description: inicia_en es obligatorio }
+
+  /api/eventos/fechas/{fecha_id}:
+    put:
+      summary: Editar una fecha (incl. marcarla como cancelada con cancelada_en)
+      tags: [Eventos]
+      parameters:
+        - { name: fecha_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inicia_en: { type: string, format: date-time, example: "2026-11-16T19:00:00" }
+                termina_en: { type: string, format: date-time, example: "2026-11-16T22:00:00" }
+                cancelada_en: { type: string, format: date-time, nullable: true, example: null }
+      responses:
+        "200": { description: Fecha actualizada }
+    delete:
+      summary: Eliminar una fecha
+      tags: [Eventos]
+      parameters:
+        - { name: fecha_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Fecha eliminada }
+
+  /api/eventos/{evento_id}/categorias:
+    post:
+      summary: Agregar una categoría a un evento existente (admin o miembro del organizador dueño)
+      tags: [Eventos]
+      parameters:
+        - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string, example: "5K Varonil" }
+                distancia_km: { type: number, exclusiveMinimum: 0, example: 5 }
+                edad_minima: { type: integer, minimum: 0, example: 18 }
+                edad_maxima: { type: integer, example: 45, description: "No puede ser menor que edad_minima." }
+                cupo_total: { type: integer, minimum: 1, example: 100 }
+                permite_lista_espera: { type: boolean, example: false }
       responses:
         "201": { description: Categoría creada }
+        "400": { description: nombre faltante, o edades/distancia/cupo inválidos }
+
+  /api/eventos/categorias/{categoria_id}:
+    put:
+      summary: Editar una categoría
+      tags: [Eventos]
+      parameters:
+        - { name: categoria_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, example: "5K Femenil" }
+                distancia_km: { type: number, exclusiveMinimum: 0, example: 5 }
+                edad_minima: { type: integer, minimum: 0, example: 18 }
+                edad_maxima: { type: integer, example: 45 }
+                cupo_total: { type: integer, minimum: 1, example: 150 }
+                permite_lista_espera: { type: boolean, example: true }
+      responses:
+        "200": { description: Categoría actualizada }
+        "400": { description: edades/distancia/cupo inválidos }
+    delete:
+      summary: Eliminar una categoría
+      tags: [Eventos]
+      parameters:
+        - { name: categoria_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Categoría eliminada }
 
   /api/eventos/categorias/{categoria_id}/boletos:
     post:
-      summary: Agregar un tipo de boleto a una categoría (solo admin)
+      summary: Agregar un tipo de boleto a una categoría (admin o miembro del organizador dueño)
       tags: [Eventos]
       parameters:
-        - { name: categoria_id, in: path, required: true, schema: { type: integer } }
+        - { name: categoria_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tipo: { type: string, enum: [general, preventa, estudiante, grupal], example: "general", description: "Si se omite, se usa general." }
+                precio: { type: number, minimum: 0, example: 250 }
+                moneda: { type: string, example: "MXN" }
+                disponible_desde: { type: string, format: date-time, example: "2026-09-01T00:00:00" }
+                disponible_hasta: { type: string, format: date-time, example: "2026-11-10T23:59:59", description: "Debe ser posterior a disponible_desde." }
+                cantidad_maxima: { type: integer, example: 100 }
       responses:
         "201": { description: Boleto creado }
+        "400": { description: tipo, precio o fechas de disponibilidad inválidos }
+
+  /api/eventos/boletos/{boleto_id}:
+    put:
+      summary: Editar un boleto
+      tags: [Eventos]
+      parameters:
+        - { name: boleto_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tipo: { type: string, enum: [general, preventa, estudiante, grupal], example: "preventa" }
+                precio: { type: number, minimum: 0, example: 200 }
+                moneda: { type: string, example: "MXN" }
+                disponible_desde: { type: string, format: date-time, example: "2026-09-01T00:00:00" }
+                disponible_hasta: { type: string, format: date-time, example: "2026-10-15T23:59:59" }
+                cantidad_maxima: { type: integer, example: 50 }
+                activo: { type: boolean, example: true }
+      responses:
+        "200": { description: Boleto actualizado }
+        "400": { description: tipo, precio o fechas de disponibilidad inválidos }
+    delete:
+      summary: Eliminar un boleto
+      tags: [Eventos]
+      parameters:
+        - { name: boleto_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Boleto eliminado }
 
   /api/rutas:
     get:
@@ -634,17 +920,21 @@ paths:
               type: object
               required: [nombre, deporte_id]
               properties:
-                nombre: { type: string }
-                deporte_id: { type: integer }
-                distancia_m: { type: number }
+                nombre: { type: string, example: "Sendero del Bosque" }
+                deporte_id: { type: integer, minimum: 1, example: 1 }
+                dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
+                distancia_m: { type: integer, exclusiveMinimum: 0, example: 5000, description: "Metros, número entero mayor a 0." }
+                desnivel_positivo_m: { type: integer, minimum: 0, example: 120 }
                 puntos:
                   type: array
                   items:
                     type: object
+                    required: [latitud, longitud]
                     properties:
-                      tipo: { type: string, enum: [inicio, fin, control, paso] }
-                      latitud: { type: number }
-                      longitud: { type: number }
+                      tipo: { type: string, enum: [inicio, meta, hidratacion, punto_interes, mirador, peligro], example: "inicio", description: "Si se omite, se usa punto_interes." }
+                      orden: { type: integer, example: 1, description: "No se puede repetir dentro de la misma ruta." }
+                      latitud: { type: number, example: 19.4 }
+                      longitud: { type: number, example: -99.1 }
       responses:
         "201": { description: Ruta creada }
 
@@ -929,8 +1219,8 @@ paths:
                 nombre_comercial: { type: string }
                 descripcion: { type: string }
                 correo_contacto: { type: string }
-                telefono_contacto: { type: string }
-                ciudad_id: { type: integer }
+                telefono_contacto: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678", description: "Solo números (7 a 15 dígitos)." }
+                ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
         "201": { description: Organizador creado }
         "409": { description: Ya tienes un perfil de organizador }
