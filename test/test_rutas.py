@@ -1,8 +1,13 @@
 import os, sys, sqlite3
 
-sys.path.insert(0, "/home/claude/work/api_sportmatch/Api-SportMatch")
+# Rutas relativas a este archivo: funciona sin importar desde dónde se
+# ejecute ni en qué máquina, siempre que este script viva en test/ dentro
+# del proyecto (Api-SportMatch/test/este_archivo.py).
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(BASE_DIR)
+sys.path.insert(0, PROJECT_DIR)
 
-DB_PATH = "/home/claude/work/test_rutas.sqlite3"
+DB_PATH = os.path.join(BASE_DIR, "test_rutas.sqlite3")
 if os.path.exists(DB_PATH):
     os.remove(DB_PATH)
 

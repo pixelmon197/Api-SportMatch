@@ -1,8 +1,13 @@
 import os, sys, sqlite3
 
-sys.path.insert(0, "/home/claude/work/api_sportmatch/Api-SportMatch")
+# Rutas relativas a este archivo: funciona sin importar desde dónde se
+# ejecute ni en qué máquina, siempre que este script viva en test/ dentro
+# del proyecto (Api-SportMatch/test/este_archivo.py).
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(BASE_DIR)
+sys.path.insert(0, PROJECT_DIR)
 
-DB_PATH = "/home/claude/work/test_organizadores.sqlite3"
+DB_PATH = os.path.join(BASE_DIR, "test_organizadores.sqlite3")
 if os.path.exists(DB_PATH):
     os.remove(DB_PATH)
 
@@ -239,5 +244,22 @@ show("ACTUALIZAR ORGANIZADOR (telefono valido)", r)
 assert r.status_code == 200 and r.get_json()["telefono_contacto"] == "5511223344"
 r = client.put(f"/api/organizadores/{organizador_id}", json={"telefono_contacto": "x1"}, headers=H_ANA)
 assert r.status_code == 400
+
+# 16) GET /api/organizadores/me: Ana encuentra su propio organizador_id
+# (sigue en 'sin_solicitud', asi que NO aparece en el listado publico)
+r = client.get("/api/organizadores/me", headers=H_ANA)
+show("MI ORGANIZADOR (Ana)", r)
+assert r.status_code == 200 and r.get_json()["id"] == organizador_id
+assert r.get_json()["estado_validacion"] in ("sin_solicitud", "aprobada")  # cambia durante el flujo de arriba
+
+# 17) El admin nunca creo un organizador -> 404 claro, no 500
+r = client.get("/api/organizadores/me", headers=H_ADMIN)
+show("MI ORGANIZADOR (admin, sin perfil)", r)
+assert r.status_code == 404
+
+# 18) Luis si tiene el suyo (el que se crea mas abajo para probar el rechazo) -> cada quien ve el propio
+r = client.get("/api/organizadores/me", headers=H_LUIS)
+show("MI ORGANIZADOR (Luis)", r)
+assert r.status_code == 200 and r.get_json()["usuario_id"] == 3
 
 print("\nTODAS LAS PRUEBAS DE ORGANIZADORES PASARON")

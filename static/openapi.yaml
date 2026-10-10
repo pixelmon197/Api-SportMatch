@@ -36,6 +36,30 @@ components:
         nombre: { type: string, example: "Running" }
         categoria: { type: string, example: "resistencia" }
         activo: { type: boolean, example: true }
+    Organizador:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        usuario_id: { type: integer, example: 1 }
+        nombre_comercial: { type: string, example: "Carreras del Valle" }
+        descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
+        correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
+        telefono_contacto: { type: string, example: "5512345678" }
+        ciudad: { type: object, nullable: true }
+        estado_validacion: { type: string, enum: [sin_solicitud, pendiente, en_revision, aprobada, rechazada, revocada], example: "sin_solicitud" }
+        validado_en: { type: string, format: date-time, nullable: true }
+        creado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
+        miembros:
+          type: array
+          description: Solo viene en las respuestas de detalle (GET /me, GET /{id}, POST, PUT).
+          items:
+            type: object
+            properties:
+              organizador_id: { type: integer, example: 1 }
+              usuario_id: { type: integer, example: 1 }
+              nombre_usuario: { type: string, example: "anaperez" }
+              rol: { type: string, enum: [propietario, administrador, colaborador], example: "propietario" }
+              agregado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
     UsuarioDeporte:
       type: object
       description: Deporte que practica un usuario (tabla `usuario_deportes`).
@@ -153,8 +177,26 @@ paths:
     put:
       summary: Actualizar mi propio perfil
       tags: [Usuarios]
+      description: >
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre_completo: { type: string, example: "Ana Pérez" }
+                telefono: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678" }
+                sexo: { type: string, enum: [masculino, femenino, otro, prefiero_no_decir], example: "femenino" }
+                idioma: { type: string, example: "es" }
+                zona_horaria: { type: string, example: "America/Mexico_City" }
+                ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
-        "200": { description: Usuario actualizado }
+        "200":
+          description: Usuario actualizado
+          content:
+            
+        "400": { description: telefono, sexo o ciudad_id inválidos }
 
   /api/usuarios/me/password:
     put:
@@ -191,9 +233,6 @@ paths:
         - name: estado_cuenta
           in: query
           schema: { type: string, enum: [pendiente_verificacion, activa, suspendida, eliminada] }
-        - name: q
-          in: query
-          schema: { type: string }
       responses:
         "200": { description: Lista paginada de usuarios }
         "403": { description: No tienes permisos }
@@ -1204,9 +1243,13 @@ paths:
       tags: [Organizadores]
       security: []
       responses:
-        "200": { description: Lista de organizadores }
+        "200":
+          description: Lista de organizadores
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Organizador" } }
     post:
-      summary: Crear mi perfil de organizador (autenticado; uno por usuario, queda "pendiente")
+      summary: Crear mi perfil de organizador (autenticado; uno por usuario, queda "sin_solicitud" hasta enviarlo a revisión)
       tags: [Organizadores]
       requestBody:
         required: true
@@ -1216,14 +1259,37 @@ paths:
               type: object
               required: [nombre_comercial]
               properties:
-                nombre_comercial: { type: string }
-                descripcion: { type: string }
-                correo_contacto: { type: string }
+                nombre_comercial: { type: string, example: "Carreras del Valle" }
+                descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
+                correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
                 telefono_contacto: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678", description: "Solo números (7 a 15 dígitos)." }
                 ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
-        "201": { description: Organizador creado }
+        "201":
+          description: Organizador creado — guarda el `id` de la respuesta, es el `organizador_id` que luego pide POST /api/eventos (o consúltalo después con GET /api/organizadores/me)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organizador" }
         "409": { description: Ya tienes un perfil de organizador }
+
+  /api/organizadores/me:
+    get:
+      summary: Mi propio perfil de organizador (aquí se obtiene el organizador_id para crear eventos)
+      tags: [Organizadores]
+      description: >
+        El listado público `GET /api/organizadores` solo muestra los
+        aprobados, así que mientras el tuyo esté en `sin_solicitud` o
+        `en_revision` no aparece ahí. Este endpoint es la forma de
+        encontrar tu propio `id` de organizador (el que pide
+        `organizador_id` en `POST /api/eventos`) sin tener que guardarlo
+        a mano desde la respuesta de cuando lo creaste.
+      responses:
+        "200":
+          description: Mi organizador
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organizador" }
+        "404": { description: Todavía no tienes un perfil de organizador (créalo con POST /api/organizadores) }
 
   /api/organizadores/{organizador_id}:
     get:
@@ -1231,16 +1297,37 @@ paths:
       tags: [Organizadores]
       security: []
       parameters:
-        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+        - { name: organizador_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
-        "200": { description: Organizador }
+        "200":
+          description: Organizador
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organizador" }
     put:
       summary: Editar mi organizador (miembro propietario/administrador, o admin)
       tags: [Organizadores]
       parameters:
-        - { name: organizador_id, in: path, required: true, schema: { type: integer } }
+        - { name: organizador_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre_comercial: { type: string, example: "Carreras del Valle" }
+                descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
+                correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
+                telefono_contacto: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678" }
+                ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
-        "200": { description: Organizador actualizado }
+        "200":
+          description: Organizador actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organizador" }
+        "400": { description: telefono_contacto inválido }
 
   /api/organizadores/{organizador_id}/miembros:
     post:

@@ -46,6 +46,23 @@ def obtener_organizador(organizador_id):
     return jsonify(organizador.to_dict(detalle=True)), 200
 
 
+@organizadores_bp.route("/me", methods=["GET"])
+@jwt_required()
+def mi_organizador():
+    """Mi propio perfil de organizador (el listado público `GET
+    /api/organizadores` solo muestra los aprobados, así que mientras el
+    mío está en 'sin_solicitud' o 'en_revision' no aparece ahí; este es
+    el único lugar para encontrar mi propio organizador_id, el que se
+    necesita para crear un evento)."""
+    usuario = get_usuario_actual()
+    organizador = Organizador.query.filter_by(usuario_id=usuario.id).filter(
+        Organizador.eliminado_en.is_(None)
+    ).first()
+    if not organizador:
+        return jsonify({"error": "Todavía no tienes un perfil de organizador"}), 404
+    return jsonify(organizador.to_dict(detalle=True)), 200
+
+
 # ============ REGISTRARSE COMO ORGANIZADOR ============
 
 @organizadores_bp.route("", methods=["POST"])
