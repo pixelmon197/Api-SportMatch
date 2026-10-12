@@ -10,7 +10,7 @@ info:
     catálogo completo de las 89 entidades del modelo.
   version: 0.5.0
 servers:
-  - url: https://api-sportmatch.onrender.com
+  - url: http://localhost:5000
 components:
   securitySchemes:
     bearerAuth:
