@@ -31,3 +31,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Archivos subidos por los usuarios
+static/uploads/

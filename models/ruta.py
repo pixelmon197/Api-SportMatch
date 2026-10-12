@@ -17,7 +17,7 @@ class Ruta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     creador_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     deporte_id = db.Column(db.Integer, db.ForeignKey("deportes.id"), nullable=False)
-    gpx_archivo_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
+    gpx_archivo_id = db.Column(db.Integer, db.ForeignKey("archivos.id"), nullable=True)  # .gpx subido con POST /api/archivos
     dificultad = db.Column(db.String(20), nullable=True)
     nombre = db.Column(db.String(150), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
@@ -28,6 +28,7 @@ class Ruta(db.Model):
     eliminado_en = db.Column(db.DateTime, nullable=True)
 
     deporte = db.relationship("Deporte")
+    gpx_archivo = db.relationship("Archivo", foreign_keys=[gpx_archivo_id])
     puntos = db.relationship(
         "RutaPunto", order_by="RutaPunto.orden", cascade="all, delete-orphan"
     )
@@ -37,6 +38,8 @@ class Ruta(db.Model):
             "id": self.id,
             "creador_id": self.creador_id,
             "deporte": self.deporte.to_dict() if self.deporte else None,
+            "gpx_archivo_id": self.gpx_archivo_id,
+            "gpx_url": self.gpx_archivo.url if self.gpx_archivo else None,
             "dificultad": self.dificultad,
             "nombre": self.nombre,
             "descripcion": self.descripcion,

@@ -3,6 +3,7 @@
 # (89 entidades en total; se irán incorporando por fases).
 
 from models.ciudad import Ciudad
+from models.archivo import Archivo, TIPOS_ARCHIVO, EXTENSIONES_PERMITIDAS, TAMANO_MAXIMO_BYTES
 from models.usuario import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from models.token_verificacion import TokenVerificacion, TIPOS_TOKEN
 from models.dispositivo import Dispositivo
@@ -75,6 +76,10 @@ from models.soporte import (
 
 __all__ = [
     "Ciudad",
+    "Archivo",
+    "TIPOS_ARCHIVO",
+    "EXTENSIONES_PERMITIDAS",
+    "TAMANO_MAXIMO_BYTES",
     "Usuario",
     "ROLES_VALIDOS",
     "ESTADOS_CUENTA",

@@ -10,5 +10,5 @@ psycopg2-binary==2.9.9
 # Autenticación con JWT
 Flask-JWT-Extended==4.6.0
 
-# Servidor para producción
-gunicorn==23.0.0
+# Subida de archivos: lee ancho/alto de las imágenes (opcional, si falta se omite)
+Pillow==10.4.0

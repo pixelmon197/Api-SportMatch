@@ -15,6 +15,7 @@ from routes.rutas import rutas_bp
 from routes.inscripciones import inscripciones_bp
 from routes.organizadores import organizadores_bp
 from routes.soporte import soporte_bp
+from routes.archivos import archivos_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -43,6 +44,7 @@ def create_app(config_class=Config):
     app.register_blueprint(inscripciones_bp)
     app.register_blueprint(organizadores_bp)
     app.register_blueprint(soporte_bp)
+    app.register_blueprint(archivos_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,
@@ -63,6 +65,10 @@ def create_app(config_class=Config):
     @app.errorhandler(404)
     def not_found(error):
         return jsonify({"error": "Recurso no encontrado"}), 404
+
+    @app.errorhandler(413)
+    def too_large(error):
+        return jsonify({"error": "El archivo es demasiado grande (el tope global por request es de 210 MB)"}), 413
 
     @app.errorhandler(500)
     def internal_error(error):

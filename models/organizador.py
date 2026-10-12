@@ -14,7 +14,7 @@ TIPOS_DOCUMENTO_VALIDACION = ("ine", "curp", "comprobante_domicilio", "rfc", "pe
 class Organizador(db.Model):
     """Tabla `organizadores`: perfil de organizador de eventos, ligado a un
     usuario. Solo puede crear/publicar eventos si `estado_validacion` es
-    'aprobado' (ver `SolicitudValidacion`).
+    'aprobada' (ver `SolicitudValidacion`).
     """
 
     __tablename__ = "organizadores"
@@ -26,7 +26,7 @@ class Organizador(db.Model):
     correo_contacto = db.Column(db.String(150), nullable=True)
     telefono_contacto = db.Column(db.String(20), nullable=True)
     ciudad_id = db.Column(db.Integer, db.ForeignKey("ciudades.id"), nullable=True)
-    logo_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
+    logo_id = db.Column(db.Integer, db.ForeignKey("archivos.id"), nullable=True)  # imagen subida con POST /api/archivos
     estado_validacion = db.Column(db.String(20), nullable=False, default="sin_solicitud")
     validado_en = db.Column(db.DateTime, nullable=True)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -42,6 +42,7 @@ class Organizador(db.Model):
     eliminado_en = db.Column(db.DateTime, nullable=True)
 
     ciudad = db.relationship("Ciudad")
+    logo = db.relationship("Archivo", foreign_keys=[logo_id])
     miembros = db.relationship("OrganizadorMiembro", cascade="all, delete-orphan")
 
     def to_dict(self, detalle=False):
@@ -52,6 +53,8 @@ class Organizador(db.Model):
             "descripcion": self.descripcion,
             "correo_contacto": self.correo_contacto,
             "telefono_contacto": self.telefono_contacto,
+            "logo_id": self.logo_id,
+            "logo_url": self.logo.url if self.logo else None,
             "ciudad": self.ciudad.to_dict() if self.ciudad else None,
             "estado_validacion": self.estado_validacion,
             "validado_en": self.validado_en.isoformat() if self.validado_en else None,
@@ -124,10 +127,9 @@ class DocumentoValidacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitud_id = db.Column(db.Integer, db.ForeignKey("solicitudes_validacion.id"), nullable=False)
     tipo_documento = db.Column(db.String(50), nullable=False)  # ej. "ine", "constancia_fiscal"
-    # NOT NULL en Neon: no hay todavía un módulo de subida de archivos, así
-    # que las rutas deben exigir un archivo_id ya existente (ver validación
-    # en routes/organizadores.py) en vez de dejarlo en None.
-    archivo_id = db.Column(db.Integer, nullable=False)
+    # NOT NULL en Neon: es el id de un archivo ya subido con POST /api/archivos
+    # (imagen o PDF del documento); se valida en routes/organizadores.py.
+    archivo_id = db.Column(db.Integer, db.ForeignKey("archivos.id"), nullable=False)
     numero_documento = db.Column(db.String(50), nullable=True)
     verificado = db.Column(db.Boolean, nullable=False, default=False)
     creado_en = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -135,6 +137,7 @@ class DocumentoValidacion(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "archivo_id": self.archivo_id,
             "tipo_documento": self.tipo_documento,
             "numero_documento": self.numero_documento,
             "verificado": self.verificado,

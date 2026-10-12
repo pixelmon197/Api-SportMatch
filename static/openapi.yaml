@@ -2,7 +2,8 @@ openapi: 3.0.3
 info:
   title: Api-SportMatch
   description: >
-    API REST de SportMatch. Fase 2: autenticación, usuarios y administradores.
+    API REST de SportMatch. Incluye subida de archivos (imágenes, videos, PDF, GPX y audio) en /api/archivos.
+    Fase 2: autenticación, usuarios y administradores.
     Fase 3 (en construcción): deportes, cuestionario de registro, eventos,
     inscripciones y valoraciones, organizadores y validación, administración
     y soporte. Ver /docs/entidades_completas.md en el repositorio para el
@@ -29,6 +30,21 @@ components:
         telefono: { type: string, pattern: '^[0-9]{7,15}$', example: "5512345678" }
         ciudad: { type: object, nullable: true }
         creado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
+    Archivo:
+      type: object
+      description: Archivo ya subido con POST /api/archivos. Su `id` es lo que se manda como portada_id, logo_id, gpx_archivo_id o archivo_id.
+      properties:
+        id: { type: integer, example: 1 }
+        propietario_id: { type: integer, example: 1 }
+        tipo: { type: string, enum: [imagen, video, documento, gpx, audio], example: "imagen" }
+        url: { type: string, example: "/static/uploads/imagen/3f2a9c1e5b7d4a8f9e0c1d2b3a4f5e6d.png" }
+        nombre_original: { type: string, example: "portada.png" }
+        tipo_mime: { type: string, example: "image/png" }
+        tamano_bytes: { type: integer, example: 184320 }
+        ancho_px: { type: integer, nullable: true, example: 1280 }
+        alto_px: { type: integer, nullable: true, example: 720 }
+        duracion_segundos: { type: integer, nullable: true, example: null }
+        subido_en: { type: string, format: date-time, example: "2026-10-12T14:30:00" }
     Deporte:
       type: object
       properties:
@@ -45,6 +61,8 @@ components:
         descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
         correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
         telefono_contacto: { type: string, example: "5512345678" }
+        logo_id: { type: integer, nullable: true, example: 1 }
+        logo_url: { type: string, nullable: true, example: "/static/uploads/imagen/3f2a9c1e5b7d4a8f9e0c1d2b3a4f5e6d.png" }
         ciudad: { type: object, nullable: true }
         estado_validacion: { type: string, enum: [sin_solicitud, pendiente, en_revision, aprobada, rechazada, revocada], example: "sin_solicitud" }
         validado_en: { type: string, format: date-time, nullable: true }
@@ -178,6 +196,11 @@ paths:
       summary: Actualizar mi propio perfil
       tags: [Usuarios]
       description: >
+        No se puede cambiar `correo`, `nombre_usuario`, `fecha_nacimiento`
+        ni `rol`/`estado_cuenta` por aquí (son datos sensibles o de
+        identidad; el correo/usuario se cambiarían con su propio flujo de
+        verificación, y el rol/estado solo los toca un admin). Todos los
+        campos son opcionales: solo se actualiza lo que se envíe.
       requestBody:
         required: true
         content:
@@ -195,7 +218,8 @@ paths:
         "200":
           description: Usuario actualizado
           content:
-            
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
         "400": { description: telefono, sexo o ciudad_id inválidos }
 
   /api/usuarios/me/password:
@@ -233,6 +257,9 @@ paths:
         - name: estado_cuenta
           in: query
           schema: { type: string, enum: [pendiente_verificacion, activa, suspendida, eliminada] }
+        - name: q
+          in: query
+          schema: { type: string }
       responses:
         "200": { description: Lista paginada de usuarios }
         "403": { description: No tienes permisos }
@@ -575,6 +602,7 @@ paths:
                 slug: { type: string, example: "5k-nocturna", description: "Opcional; si se omite se genera a partir del título." }
                 dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
                 descripcion: { type: string, example: "Carrera nocturna por el centro de la ciudad" }
+                portada_id: { type: integer, minimum: 1, example: 1, description: "Opcional. Id de una imagen subida con POST /api/archivos." }
                 edad_minima: { type: integer, minimum: 0, example: 12 }
                 es_publico: { type: boolean, example: true }
                 deportes: { type: array, items: { type: integer, example: 1 } }
@@ -638,6 +666,21 @@ paths:
       tags: [Eventos]
       parameters:
         - { name: evento_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titulo: { type: string, example: "5K Nocturna 2026" }
+                tipo: { type: string, enum: [carrera, ruta, torneo, liga, entrenamiento, experiencia_grupal], example: "carrera" }
+                dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
+                descripcion: { type: string, example: "Carrera nocturna por el centro de la ciudad" }
+                portada_id: { type: integer, minimum: 1, example: 1, description: "Id de una imagen subida con POST /api/archivos." }
+                edad_minima: { type: integer, minimum: 0, example: 12 }
+                es_publico: { type: boolean, example: true }
+                estado: { type: string, enum: [borrador, en_revision, publicado, cancelado, finalizado], example: "publicado" }
       responses:
         "200": { description: Evento actualizado }
     delete:
@@ -941,6 +984,63 @@ paths:
       responses:
         "204": { description: Boleto eliminado }
 
+  /api/archivos:
+    post:
+      summary: Subir una imagen, video, documento (PDF), GPX o audio. Regresa el `id` que luego se usa en portada_id, logo_id, gpx_archivo_id o archivo_id
+      tags: [Archivos]
+      description: >
+        Se manda como `multipart/form-data` (en Swagger aparece un botón
+        para elegir el archivo). El `tipo` es opcional, si no se manda se
+        adivina por la extensión. Extensiones y tamaño máximo por tipo -
+        imagen (jpg, jpeg, png, webp, gif; 8 MB), video (mp4, mov, webm;
+        200 MB), documento (pdf; 15 MB), gpx (gpx; 5 MB), audio (mp3, wav,
+        m4a; 30 MB). Flujo típico - 1) subir el archivo, 2) copiar el `id`
+        de la respuesta, 3) mandarlo en el endpoint que lo usa (por
+        ejemplo `portada_id` en POST /api/eventos).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary, description: "El archivo a subir." }
+                tipo: { type: string, enum: [imagen, video, documento, gpx, audio], example: "imagen", description: "Opcional. Si se omite se deduce de la extensión." }
+                duracion_segundos: { type: integer, example: 95, description: "Opcional, solo para video/audio (el servidor no la calcula)." }
+      responses:
+        "201":
+          description: Archivo subido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Archivo" }
+        "400": { description: Falta el archivo, está vacío, tipo/extensión no permitidos o supera el tamaño máximo del tipo }
+        "413": { description: El request supera el tope global de 210 MB }
+
+  /api/archivos/{archivo_id}:
+    get:
+      summary: Ver los datos de un archivo subido (incluye su url)
+      tags: [Archivos]
+      security: []
+      parameters:
+        - { name: archivo_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Archivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Archivo" }
+        "404": { description: No existe o fue eliminado }
+    delete:
+      summary: Eliminar un archivo (borrado suave; solo su dueño o un admin)
+      tags: [Archivos]
+      parameters:
+        - { name: archivo_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Archivo eliminado }
+        "403": { description: No es tu archivo }
+        "404": { description: No existe o ya estaba eliminado }
+
   /api/rutas:
     get:
       summary: Listar rutas públicas. Filtros - deporte_id, creador_id
@@ -964,6 +1064,7 @@ paths:
                 dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
                 distancia_m: { type: integer, exclusiveMinimum: 0, example: 5000, description: "Metros, número entero mayor a 0." }
                 desnivel_positivo_m: { type: integer, minimum: 0, example: 120 }
+                gpx_archivo_id: { type: integer, minimum: 1, example: 1, description: "Opcional. Id de un archivo .gpx subido con POST /api/archivos." }
                 puntos:
                   type: array
                   items:
@@ -990,7 +1091,21 @@ paths:
       summary: Editar mi ruta (dueño o admin)
       tags: [Rutas]
       parameters:
-        - { name: ruta_id, in: path, required: true, schema: { type: integer } }
+        - { name: ruta_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, example: "Sendero del Bosque" }
+                descripcion: { type: string, example: "Ruta de montaña de 5 km" }
+                dificultad: { type: string, enum: [facil, moderada, dificil, extrema], example: "moderada" }
+                distancia_m: { type: integer, exclusiveMinimum: 0, example: 5000 }
+                desnivel_positivo_m: { type: integer, minimum: 0, example: 120 }
+                es_publica: { type: boolean, example: true }
+                gpx_archivo_id: { type: integer, minimum: 1, example: 1, description: "Id de un archivo .gpx subido con POST /api/archivos." }
       responses:
         "200": { description: Ruta actualizada }
         "403": { description: No tienes permisos sobre esta ruta }
@@ -1263,6 +1378,7 @@ paths:
                 descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
                 correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
                 telefono_contacto: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678", description: "Solo números (7 a 15 dígitos)." }
+                logo_id: { type: integer, minimum: 1, example: 1, description: "Opcional. Id de una imagen subida con POST /api/archivos." }
                 ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
         "201":
@@ -1320,6 +1436,7 @@ paths:
                 descripcion: { type: string, example: "Organizamos carreras de calle desde 2015" }
                 correo_contacto: { type: string, example: "contacto@carrerasdelvalle.com" }
                 telefono_contacto: { type: string, pattern: '^[0-9]{7,15}$', minLength: 7, maxLength: 15, example: "5512345678" }
+                logo_id: { type: integer, minimum: 1, example: 1, description: "Id de una imagen subida con POST /api/archivos." }
                 ciudad_id: { type: integer, minimum: 1, example: 1 }
       responses:
         "200":
@@ -1366,11 +1483,33 @@ paths:
                   items:
                     type: object
                     properties:
-                      tipo_documento: { type: string, example: "ine" }
-                      numero_documento: { type: string }
+                      tipo_documento: { type: string, enum: [ine, curp, comprobante_domicilio, rfc, permiso_evento], example: "ine" }
+                      archivo_id: { type: integer, minimum: 1, example: 1, description: "Id de una imagen o PDF subido con POST /api/archivos." }
+                      numero_documento: { type: string, example: "ABCD123456HDFRRL09" }
       responses:
         "201": { description: Solicitud enviada (organizador pasa a "en_revision") }
         "409": { description: Ya hay una solicitud pendiente }
+
+  /api/organizadores/solicitudes/{solicitud_id}/documentos:
+    post:
+      summary: Agregar un documento a una solicitud de validación (dueño del organizador o admin)
+      tags: [Organizadores]
+      parameters:
+        - { name: solicitud_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo_documento, archivo_id]
+              properties:
+                tipo_documento: { type: string, enum: [ine, curp, comprobante_domicilio, rfc, permiso_evento], example: "ine" }
+                archivo_id: { type: integer, minimum: 1, example: 1, description: "Id de una imagen o PDF subido con POST /api/archivos." }
+                numero_documento: { type: string, example: "ABCD123456HDFRRL09" }
+      responses:
+        "201": { description: Documento agregado }
+        "400": { description: tipo_documento inválido, o archivo_id inexistente / de un tipo que no sirve (solo imagen o PDF) }
 
   /api/organizadores/solicitudes:
     get:

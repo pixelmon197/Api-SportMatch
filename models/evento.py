@@ -25,7 +25,7 @@ class Evento(db.Model):
     titulo = db.Column(db.String(150), nullable=False)
     slug = db.Column(db.String(150), nullable=False, unique=True)
     descripcion = db.Column(db.Text, nullable=True)
-    portada_id = db.Column(db.Integer, nullable=True)  # futura FK a `archivos`
+    portada_id = db.Column(db.Integer, db.ForeignKey("archivos.id"), nullable=True)  # imagen subida con POST /api/archivos
     edad_minima = db.Column(db.Integer, nullable=True)
     es_publico = db.Column(db.Boolean, nullable=False, default=True)
     publicado_en = db.Column(db.DateTime, nullable=True)
@@ -40,6 +40,8 @@ class Evento(db.Model):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     eliminado_en = db.Column(db.DateTime, nullable=True)  # borrado suave
+
+    portada = db.relationship("Archivo", foreign_keys=[portada_id])
 
     deportes = db.relationship("EventoDeporte", cascade="all, delete-orphan")
     requisitos = db.relationship(
@@ -60,6 +62,8 @@ class Evento(db.Model):
             "titulo": self.titulo,
             "slug": self.slug,
             "descripcion": self.descripcion,
+            "portada_id": self.portada_id,
+            "portada_url": self.portada.url if self.portada else None,
             "edad_minima": self.edad_minima,
             "es_publico": self.es_publico,
             "publicado_en": self.publicado_en.isoformat() if self.publicado_en else None,

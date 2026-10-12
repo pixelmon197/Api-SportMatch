@@ -39,6 +39,14 @@ CREATE TABLE usuarios (
     eliminado_en TIMESTAMP
 );
 
+CREATE TABLE archivos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    propietario_id INTEGER REFERENCES usuarios(id),
+    tipo TEXT NOT NULL, url TEXT NOT NULL, nombre_original TEXT, tipo_mime TEXT,
+    tamano_bytes BIGINT, ancho_px INTEGER, alto_px INTEGER, duracion_segundos INTEGER,
+    subido_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, eliminado_en TIMESTAMP,
+    CHECK (tipo IN ('imagen','video','documento','gpx','audio'))
+);
 CREATE TABLE organizadores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id),
@@ -117,6 +125,10 @@ conn.execute(
     "INSERT INTO usuarios (nombre_completo, correo, contrasena, fecha_nacimiento, sexo, nombre_usuario, rol, estado_cuenta, registro_completo_en) "
     "VALUES ('Luis Gomez', 'luis@correo.com', 'x', '1998-01-01', 'masculino', 'luisg', 'usuario', 'activa', CURRENT_TIMESTAMP)"
 )
+for i, (tipo, url) in enumerate([("imagen", "/static/uploads/imagen/ine.jpg"),
+                                 ("documento", "/static/uploads/documento/rfc.pdf"),
+                                 ("video", "/static/uploads/video/v.mp4")], start=101):
+    conn.execute("INSERT INTO archivos (id, propietario_id, tipo, url) VALUES (?, 1, ?, ?)", (i, tipo, url))
 conn.commit()
 conn.close()
 
@@ -179,7 +191,7 @@ assert r.get_json()["estado_validacion"] == "en_revision"
 
 # 6) Documento con tipo_documento inválido debe rechazarse (400), no explotar (500)
 r = client.post(f"/api/organizadores/solicitudes/{solicitud_id}/documentos",
-                json={"tipo_documento": "no-valido", "archivo_id": 5}, headers=H_ANA)
+                json={"tipo_documento": "no-valido", "archivo_id": 101}, headers=H_ANA)
 show("AGREGAR DOCUMENTO (tipo invalido)", r)
 assert r.status_code == 400
 
@@ -188,6 +200,18 @@ r = client.post(f"/api/organizadores/solicitudes/{solicitud_id}/documentos",
                 json={"tipo_documento": "rfc"}, headers=H_ANA)
 show("AGREGAR DOCUMENTO (sin archivo_id)", r)
 assert r.status_code == 400
+
+# 7b) archivo_id que no existe -> 400 claro (antes se aceptaba cualquier numero y Neon fallaba por la FK)
+r = client.post(f"/api/organizadores/solicitudes/{solicitud_id}/documentos",
+                json={"tipo_documento": "rfc", "archivo_id": 999}, headers=H_ANA)
+show("AGREGAR DOCUMENTO (archivo inexistente)", r)
+assert r.status_code == 400 and "archivo existente" in r.get_json()["error"]
+
+# 7c) archivo de tipo video no sirve como documento de validacion
+r = client.post(f"/api/organizadores/solicitudes/{solicitud_id}/documentos",
+                json={"tipo_documento": "rfc", "archivo_id": 103}, headers=H_ANA)
+show("AGREGAR DOCUMENTO (archivo tipo video)", r)
+assert r.status_code == 400 and "tipo" in r.get_json()["error"]
 
 # 8) Documento válido
 r = client.post(f"/api/organizadores/solicitudes/{solicitud_id}/documentos",

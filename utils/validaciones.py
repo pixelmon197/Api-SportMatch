@@ -16,3 +16,20 @@ def validar_telefono(valor, campo="telefono"):
     if not isinstance(valor, str) or not _PATRON_TELEFONO.match(valor):
         return f"{campo} debe contener solo números (entre 7 y 15 dígitos)"
     return None
+
+
+def validar_archivo(archivo_id, tipos_permitidos, campo="archivo_id"):
+    """Valida que `archivo_id` sea un archivo existente (no eliminado) de
+    alguno de los `tipos_permitidos`. Regresa un mensaje de error (str) o
+    None si está bien (o si no se mandó: None se considera "sin archivo").
+    Los ids se obtienen con POST /api/archivos."""
+    if archivo_id is None:
+        return None
+    from models import Archivo  # import local: evita ciclos de imports
+
+    archivo = Archivo.query.filter_by(id=archivo_id).filter(Archivo.eliminado_en.is_(None)).first()
+    if not archivo:
+        return f"{campo} no corresponde a un archivo existente (súbelo primero con POST /api/archivos)"
+    if archivo.tipo not in tipos_permitidos:
+        return f"{campo} debe ser un archivo de tipo: {', '.join(tipos_permitidos)} (el enviado es '{archivo.tipo}')"
+    return None

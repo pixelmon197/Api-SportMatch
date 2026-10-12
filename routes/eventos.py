@@ -23,6 +23,7 @@ from models import (
     TIPOS_SEDE,
     TIPOS_BOLETO,
 )
+from utils.validaciones import validar_archivo
 from utils.auth import get_usuario_actual, puede_gestionar_evento, puede_gestionar_organizador
 from utils.fechas import parse_datetime
 
@@ -210,6 +211,8 @@ def crear_evento():
     edad_minima = data.get("edad_minima")
     if edad_minima is not None and edad_minima < 0:
         return jsonify({"error": "edad_minima no puede ser negativa"}), 400
+    if error := validar_archivo(data.get("portada_id"), ("imagen",), "portada_id"):
+        return jsonify({"error": error}), 400
 
     # organizador_id es NOT NULL en Neon: todo evento (incluso uno creado
     # por un admin) debe pertenecer a un organizador ya existente.
@@ -231,6 +234,7 @@ def crear_evento():
         titulo=titulo,
         slug=data.get("slug") or _generar_slug_unico(titulo),
         descripcion=data.get("descripcion"),
+        portada_id=data.get("portada_id"),
         edad_minima=edad_minima,
         es_publico=data.get("es_publico", True),
         estado="borrador",
@@ -326,8 +330,10 @@ def actualizar_evento(evento_id):
         return jsonify({"error": f"dificultad debe ser una de: {', '.join(DIFICULTADES_EVENTO)}"}), 400
     if data.get("edad_minima") is not None and data["edad_minima"] < 0:
         return jsonify({"error": "edad_minima no puede ser negativa"}), 400
+    if error := validar_archivo(data.get("portada_id"), ("imagen",), "portada_id"):
+        return jsonify({"error": error}), 400
 
-    for campo in ("tipo", "dificultad", "titulo", "descripcion", "edad_minima", "es_publico", "estado"):
+    for campo in ("tipo", "dificultad", "titulo", "descripcion", "portada_id", "edad_minima", "es_publico", "estado"):
         if campo in data:
             setattr(evento, campo, data[campo])
 

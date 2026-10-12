@@ -23,3 +23,8 @@ class Config:
         "JWT_SECRET_KEY", "cambia-esta-clave-jwt-en-produccion"
     )
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=8)
+
+    # Subida de archivos: tope global del request (el máximo real por tipo, p. ej.
+    # 8 MB para imágenes, se valida en routes/archivos.py). Flask responde 413
+    # solo si se supera este tope, antes de leer el archivo completo.
+    MAX_CONTENT_LENGTH = 210 * 1024 * 1024

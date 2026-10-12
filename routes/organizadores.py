@@ -14,7 +14,7 @@ from models import (
     TIPOS_DOCUMENTO_VALIDACION,
 )
 from utils.auth import admin_required, get_usuario_actual, puede_gestionar_organizador
-from utils.validaciones import validar_telefono
+from utils.validaciones import validar_telefono, validar_archivo
 from utils.auditoria import registrar_auditoria
 
 organizadores_bp = Blueprint("organizadores", __name__, url_prefix="/api/organizadores")
@@ -80,6 +80,8 @@ def crear_organizador():
         return jsonify({"error": "nombre_comercial es obligatorio"}), 400
     if error := validar_telefono(data.get("telefono_contacto"), "telefono_contacto"):
         return jsonify({"error": error}), 400
+    if error := validar_archivo(data.get("logo_id"), ("imagen",), "logo_id"):
+        return jsonify({"error": error}), 400
 
     organizador = Organizador(
         usuario_id=usuario.id,
@@ -87,6 +89,7 @@ def crear_organizador():
         descripcion=data.get("descripcion"),
         correo_contacto=data.get("correo_contacto"),
         telefono_contacto=data.get("telefono_contacto"),
+        logo_id=data.get("logo_id"),
         ciudad_id=data.get("ciudad_id"),
         estado_validacion="sin_solicitud",
     )
@@ -107,7 +110,9 @@ def actualizar_organizador(organizador_id):
     data = request.get_json(force=True, silent=True) or {}
     if error := validar_telefono(data.get("telefono_contacto"), "telefono_contacto"):
         return jsonify({"error": error}), 400
-    for campo in ("nombre_comercial", "descripcion", "correo_contacto", "telefono_contacto", "ciudad_id"):
+    if error := validar_archivo(data.get("logo_id"), ("imagen",), "logo_id"):
+        return jsonify({"error": error}), 400
+    for campo in ("nombre_comercial", "descripcion", "correo_contacto", "telefono_contacto", "logo_id", "ciudad_id"):
         if campo in data:
             setattr(organizador, campo, data[campo])
     db.session.commit()
@@ -254,6 +259,9 @@ def enviar_solicitud(organizador_id):
             return jsonify(
                 {"error": f"tipo_documento debe ser uno de: {', '.join(TIPOS_DOCUMENTO_VALIDACION)}"}
             ), 400
+        if error := validar_archivo(archivo_id, ("imagen", "documento"), "archivo_id"):
+            db.session.rollback()
+            return jsonify({"error": error}), 400
         db.session.add(
             DocumentoValidacion(
                 solicitud_id=solicitud.id,
@@ -286,6 +294,8 @@ def agregar_documento(solicitud_id):
         ), 400
     if not archivo_id:
         return jsonify({"error": "archivo_id es obligatorio"}), 400
+    if error := validar_archivo(archivo_id, ("imagen", "documento"), "archivo_id"):
+        return jsonify({"error": error}), 400
 
     documento = DocumentoValidacion(
         solicitud_id=solicitud_id,

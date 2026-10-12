@@ -4,6 +4,7 @@ from flask_jwt_extended import jwt_required
 from database import db
 from models import Ruta, RutaPunto, EventoRuta, EventoCategoria, Evento, Deporte, TIPOS_PUNTO_RUTA, DIFICULTADES_RUTA
 from utils.auth import get_usuario_actual, puede_gestionar_evento
+from utils.validaciones import validar_archivo
 
 rutas_bp = Blueprint("rutas", __name__, url_prefix="/api/rutas")
 
@@ -66,13 +67,14 @@ def crear_ruta():
         return jsonify({"error": "nombre y deporte_id son obligatorios"}), 400
     if not Deporte.query.get(deporte_id):
         return jsonify({"error": "deporte_id inválido"}), 400
-    error = _validar_ruta(data)
+    error = _validar_ruta(data) or validar_archivo(data.get("gpx_archivo_id"), ("gpx",), "gpx_archivo_id")
     if error:
         return jsonify({"error": error}), 400
 
     ruta = Ruta(
         creador_id=usuario.id,
         deporte_id=deporte_id,
+        gpx_archivo_id=data.get("gpx_archivo_id"),
         dificultad=data.get("dificultad"),
         nombre=nombre,
         descripcion=data.get("descripcion"),
@@ -123,11 +125,11 @@ def actualizar_ruta(ruta_id):
         "distancia_m": data.get("distancia_m", ruta.distancia_m),
         "desnivel_positivo_m": data.get("desnivel_positivo_m", ruta.desnivel_positivo_m),
     }
-    error = _validar_ruta(datos_completos)
+    error = _validar_ruta(datos_completos) or validar_archivo(data.get("gpx_archivo_id"), ("gpx",), "gpx_archivo_id")
     if error:
         return jsonify({"error": error}), 400
     for campo in (
-        "nombre", "descripcion", "dificultad", "distancia_m", "desnivel_positivo_m", "es_publica",
+        "nombre", "descripcion", "dificultad", "distancia_m", "desnivel_positivo_m", "es_publica", "gpx_archivo_id",
     ):
         if campo in data:
             setattr(ruta, campo, data[campo])
