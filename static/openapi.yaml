@@ -10,7 +10,7 @@ info:
     catálogo completo de las 89 entidades del modelo.
   version: 0.5.0
 servers:
-  - url: https://api-sportmatch.onrender.com
+  - url: http://localhost:5000
 components:
   securitySchemes:
     bearerAuth:
@@ -56,6 +56,40 @@ components:
           properties:
             perfil: { $ref: "#/components/schemas/Perfil" }
             deportes: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
+            contadores: { $ref: "#/components/schemas/Contadores" }
+            relacion: { $ref: "#/components/schemas/Relacion" }
+    Contadores:
+      type: object
+      properties:
+        seguidores: { type: integer, example: 12 }
+        siguiendo: { type: integer, example: 8 }
+        amigos: { type: integer, example: 5 }
+    Relacion:
+      type: object
+      nullable: true
+      description: Cómo se relaciona quien consulta con ese usuario, para saber qué botón mostrar. Es `null` si no hay sesión o es mi propio perfil.
+      properties:
+        yo_sigo: { type: boolean, example: true }
+        me_sigue: { type: boolean, example: false }
+        amistad: { type: string, enum: [ninguna, solicitud_enviada, solicitud_recibida, aceptada], example: "ninguna" }
+        amistad_id: { type: integer, nullable: true, example: null, description: "Id de la solicitud/amistad (sirve para aceptarla o cancelarla)." }
+    TarjetaUsuario:
+      type: object
+      description: Datos mínimos y públicos de un usuario en un listado.
+      properties:
+        id: { type: integer, example: 2 }
+        nombre_completo: { type: string, example: "Luis Gómez" }
+        nombre_usuario: { type: string, example: "luisg" }
+        avatar_url: { type: string, nullable: true, example: "/static/uploads/imagen/3f2a9c1e5b7d4a8f9e0c1d2b3a4f5e6d.png" }
+    Amistad:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        usuario_id: { type: integer, example: 1, description: "Quien envió la solicitud." }
+        amigo_id: { type: integer, example: 3, description: "Quien la recibió." }
+        estado: { type: string, enum: [pendiente, aceptada, rechazada], example: "pendiente" }
+        creado_en: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+        respondida_en: { type: string, format: date-time, nullable: true, example: null }
     PerfilPublico:
       type: object
       description: Lo que ve un tercero. Nunca incluye correo, teléfono, fecha de nacimiento, sexo ni rol.
@@ -66,6 +100,8 @@ components:
         ciudad: { type: object, nullable: true }
         perfil: { $ref: "#/components/schemas/Perfil" }
         deportes: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
+        contadores: { $ref: "#/components/schemas/Contadores" }
+        relacion: { $ref: "#/components/schemas/Relacion" }
     Archivo:
       type: object
       description: Archivo ya subido con POST /api/archivos. Su `id` es lo que se manda como portada_id, logo_id, gpx_archivo_id o archivo_id.
@@ -1130,6 +1166,363 @@ paths:
               schema: { $ref: "#/components/schemas/PerfilPublico" }
         "403": { description: Perfil privado o solo para amigos }
         "404": { description: Perfil no encontrado }
+
+  /api/seguidores/{usuario_id}:
+    post:
+      summary: Seguir a un usuario (no necesita aprobación)
+      tags: [Seguidores]
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+      responses:
+        "201": { description: Ahora lo sigues }
+        "400": { description: No puedes seguirte a ti mismo }
+        "404": { description: El usuario no existe, está suspendido, o te bloqueó }
+        "409": { description: Ya lo sigues, o lo tienes bloqueado (desbloquéalo primero) }
+    delete:
+      summary: Dejar de seguir a un usuario
+      tags: [Seguidores]
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+      responses:
+        "204": { description: Dejaste de seguirlo }
+        "404": { description: No lo seguías }
+
+  /api/seguidores/me/seguidores:
+    get:
+      summary: Quiénes me siguen
+      tags: [Seguidores]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada, del más reciente al más antiguo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seguidores:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            desde: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/seguidores/me/siguiendo:
+    get:
+      summary: A quiénes sigo
+      tags: [Seguidores]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada, del más reciente al más antiguo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  siguiendo:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            desde: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/seguidores/{usuario_id}/seguidores:
+    get:
+      summary: Quiénes siguen a otro usuario (respeta la visibilidad de su perfil)
+      tags: [Seguidores]
+      security: [{}, { bearerAuth: [] }]
+      description: Sin los usuarios que bloqueaste o que te bloquearon. 403 si el perfil es privado o solo para amigos; 404 si no existe o hay un bloqueo.
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seguidores:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            desde: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+        "403": { description: Perfil privado o solo para amigos }
+        "404": { description: Perfil no encontrado }
+
+  /api/seguidores/{usuario_id}/siguiendo:
+    get:
+      summary: A quiénes sigue otro usuario (respeta la visibilidad de su perfil)
+      tags: [Seguidores]
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  siguiendo:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            desde: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+        "403": { description: Perfil privado o solo para amigos }
+        "404": { description: Perfil no encontrado }
+
+  /api/amistades:
+    get:
+      summary: Mis amigos (amistades aceptadas)
+      tags: [Amistades]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada, en orden alfabético
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  amigos:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            desde: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                            amistad_id: { type: integer, example: 1 }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/amistades/solicitudes:
+    post:
+      summary: Enviar una solicitud de amistad
+      tags: [Amistades]
+      description: Si antes te la habían rechazado, se reutiliza esa solicitud y vuelve a quedar pendiente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuario_id]
+              properties:
+                usuario_id: { type: integer, minimum: 1, example: 3, description: "Id del usuario al que le envías la solicitud." }
+      responses:
+        "201":
+          description: Solicitud enviada (estado pendiente)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Amistad" }
+        "400": { description: usuario_id faltante o inválido, o te lo mandas a ti mismo }
+        "404": { description: El usuario no existe, está suspendido, o te bloqueó }
+        "409": { description: Ya son amigos, ya enviaste una solicitud, esa persona ya te envió una (viene su `solicitud_id` para aceptarla), o lo tienes bloqueado }
+
+  /api/amistades/solicitudes/recibidas:
+    get:
+      summary: Solicitudes de amistad pendientes que me enviaron
+      tags: [Amistades]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada. Usa `solicitud_id` para aceptar o rechazar.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  solicitudes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        solicitud_id: { type: integer, example: 1 }
+                        usuario: { $ref: "#/components/schemas/TarjetaUsuario" }
+                        creado_en: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/amistades/solicitudes/enviadas:
+    get:
+      summary: Solicitudes de amistad pendientes que yo envié
+      tags: [Amistades]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada. Usa `solicitud_id` para cancelar.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  solicitudes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        solicitud_id: { type: integer, example: 1 }
+                        usuario: { $ref: "#/components/schemas/TarjetaUsuario" }
+                        creado_en: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/amistades/solicitudes/{solicitud_id}/aceptar:
+    put:
+      summary: Aceptar una solicitud que me enviaron
+      tags: [Amistades]
+      parameters:
+        - { name: solicitud_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Ahora son amigos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Amistad" }
+        "403": { description: La solicitud no es para ti }
+        "404": { description: No existe }
+        "409": { description: Ya estaba aceptada o rechazada }
+
+  /api/amistades/solicitudes/{solicitud_id}/rechazar:
+    put:
+      summary: Rechazar una solicitud que me enviaron
+      tags: [Amistades]
+      parameters:
+        - { name: solicitud_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Solicitud rechazada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Amistad" }
+        "403": { description: La solicitud no es para ti }
+        "404": { description: No existe }
+        "409": { description: Ya estaba aceptada o rechazada }
+
+  /api/amistades/solicitudes/{solicitud_id}:
+    delete:
+      summary: Cancelar una solicitud que yo envié (solo si sigue pendiente)
+      tags: [Amistades]
+      parameters:
+        - { name: solicitud_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "204": { description: Solicitud cancelada }
+        "403": { description: No la enviaste tú }
+        "404": { description: No existe }
+        "409": { description: Ya no estaba pendiente }
+
+  /api/amistades/amigos/{usuario_id}:
+    delete:
+      summary: Eliminar a alguien de mis amigos (se borra para ambos)
+      tags: [Amistades]
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+      responses:
+        "204": { description: Amistad eliminada }
+        "404": { description: No son amigos }
+
+  /api/bloqueos:
+    get:
+      summary: Usuarios que he bloqueado
+      tags: [Bloqueos]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bloqueados:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TarjetaUsuario" }
+                        - type: object
+                          properties:
+                            bloqueado_en: { type: string, format: date-time, example: "2026-10-19T14:30:00" }
+                  total: { type: integer, example: 3 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/bloqueos/{usuario_id}:
+    post:
+      summary: Bloquear a un usuario
+      tags: [Bloqueos]
+      description: >
+        La persona bloqueada ya no puede ver tu perfil (le sale 404), seguirte
+        ni enviarte solicitudes. Además se borran los seguimientos (en ambos
+        sentidos) y la amistad o solicitudes pendientes que hubiera entre los dos.
+        Desbloquear después NO los restaura.
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+      responses:
+        "201": { description: Usuario bloqueado }
+        "400": { description: No puedes bloquearte a ti mismo }
+        "404": { description: El usuario no existe }
+        "409": { description: Ya lo tenías bloqueado }
+    delete:
+      summary: Desbloquear a un usuario
+      tags: [Bloqueos]
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 2 } }
+      responses:
+        "204": { description: Usuario desbloqueado }
+        "404": { description: No lo tenías bloqueado }
 
   /api/archivos:
     post:

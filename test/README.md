@@ -32,6 +32,7 @@ python3 test/test_soporte.py
 python3 test/test_administradores.py
 python3 test/test_archivos.py
 python3 test/test_perfiles.py
+python3 test/test_social.py
 ```
 
 O, parado dentro de `test/`:
@@ -62,6 +63,7 @@ detuvo.
 | `test_administradores.py` | Rol de administrador y sus permisos |
 | `test_archivos.py` | Subida de imágenes/videos/PDF/GPX, límites, y uso en eventos, organizadores y rutas |
 | `test_perfiles.py` | Perfil propio, ubicación y visibilidad (público/amigos/privado, amistad, bloqueos) |
+| `test_social.py` | Seguidores, solicitudes de amistad y bloqueos (y su efecto en perfiles) |
 
 ## Notas
 

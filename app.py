@@ -17,6 +17,9 @@ from routes.organizadores import organizadores_bp
 from routes.soporte import soporte_bp
 from routes.archivos import archivos_bp
 from routes.perfiles import perfiles_bp
+from routes.seguidores import seguidores_bp
+from routes.amistades import amistades_bp
+from routes.bloqueos import bloqueos_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -47,6 +50,9 @@ def create_app(config_class=Config):
     app.register_blueprint(soporte_bp)
     app.register_blueprint(archivos_bp)
     app.register_blueprint(perfiles_bp)
+    app.register_blueprint(seguidores_bp)
+    app.register_blueprint(amistades_bp)
+    app.register_blueprint(bloqueos_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,
@@ -78,6 +84,7 @@ def create_app(config_class=Config):
 
     return app
 
-app = create_app()
+
 if __name__ == "__main__":
+    app = create_app()
     app.run(host="0.0.0.0", debug=True, port=5000)

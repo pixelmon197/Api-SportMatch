@@ -1,6 +1,6 @@
 # Api-SportMatch — Resumen del proyecto y catálogo de endpoints
 
-Última actualización: Fase 14 (perfiles). Este documento resume
+Última actualización: Fase 15 (seguidores, amistades y bloqueos). Este documento resume
 todo el trabajo de revisión/reparación hecho sobre la API contra el
 esquema real de Neon (`Neon.sql`), y cataloga **todos los endpoints
 disponibles hasta el momento**.
@@ -42,11 +42,12 @@ regresiones.
 | 11-12 | Revisión del Swagger | Teléfono solo números, `ciudad_id` validado, `organizador_id` obligatorio documentado, 23 endpoints de eventos documentados, `GET /api/organizadores/me`, cuerpo de `PUT /api/usuarios/me`. |
 | 13 | Archivos | Nuevo módulo para subir imágenes, videos, PDF, GPX y audio (`/api/archivos`); `portada_id`, `logo_id`, `gpx_archivo_id` y `archivo_id` pasan a ser llaves foráneas reales. Ver `docs/fase13_archivos.md`. |
 | 14 | Perfiles | Nuevo módulo `/api/perfiles`: ver/editar mi perfil, ubicación, y ver el de otros respetando visibilidad (público/amigos/privado), amistad y bloqueos. `perfiles` y `bloqueos` no tienen `id` propio. Ver `docs/fase14_perfiles.md`. |
+| 15 | Seguidores, amistades y bloqueos | 17 endpoints nuevos (`/api/seguidores`, `/api/amistades`, `/api/bloqueos`). Bloquear borra seguimientos y amistad y oculta el perfil (404). Los perfiles ahora traen `contadores` y `relacion`. `seguidores` y `bloqueos` no tienen `id` propio. Ver `docs/fase15_seguidores_amistades_bloqueos.md`. |
 
 ### Pendiente conocido (no bloquea nada hoy)
 
 - `usuarios.firebase_uid` (nuevo en Neon2.sql) todavía no se mapea: solo hará falta si se agrega inicio de sesión con Firebase.
-- Módulos de Neon sin endpoints todavía: pagos, red social (amistades, seguidores, bloqueos, comunidades), notificaciones, marketplace, publicidad, gamificación y música/video (ver la respuesta de la Fase 13).
+- Módulos de Neon sin endpoints todavía: pagos, comunidades y tarjetas de conexión, notificaciones, marketplace, publicidad, gamificación y música/video (ver la respuesta de la Fase 13).
 - `AceptacionLegal` y `Dispositivo` tienen modelo pero **ningún endpoint
   implementado todavía**; sus columnas no se han contrastado a fondo
   contra Neon porque no hay código que las use.
@@ -218,6 +219,40 @@ Además, en Organizadores: `GET /api/organizadores/me` (Autenticado) regresa mi 
 | GET | `/api/perfiles/usuario/{nombre_usuario}` | Público* | Ver un perfil por nombre de usuario |
 
 \* Sin token solo si el perfil es público; con token se reconoce a los amigos.
+
+### Seguidores — `/api/seguidores`
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/seguidores/{usuario_id}` | Autenticado | Seguir a un usuario |
+| DELETE | `/api/seguidores/{usuario_id}` | Autenticado | Dejar de seguir |
+| GET | `/api/seguidores/me/seguidores` | Autenticado | Quiénes me siguen |
+| GET | `/api/seguidores/me/siguiendo` | Autenticado | A quiénes sigo |
+| GET | `/api/seguidores/{usuario_id}/seguidores` | Público* | Seguidores de otro usuario |
+| GET | `/api/seguidores/{usuario_id}/siguiendo` | Público* | A quiénes sigue otro usuario |
+
+### Amistades — `/api/amistades`
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| GET | `/api/amistades` | Autenticado | Mis amigos |
+| POST | `/api/amistades/solicitudes` | Autenticado | Enviar solicitud de amistad |
+| GET | `/api/amistades/solicitudes/recibidas` | Autenticado | Solicitudes que me enviaron |
+| GET | `/api/amistades/solicitudes/enviadas` | Autenticado | Solicitudes que envié |
+| PUT | `/api/amistades/solicitudes/{id}/aceptar` | Autenticado | Aceptar (solo quien la recibió) |
+| PUT | `/api/amistades/solicitudes/{id}/rechazar` | Autenticado | Rechazar (solo quien la recibió) |
+| DELETE | `/api/amistades/solicitudes/{id}` | Autenticado | Cancelar una que envié |
+| DELETE | `/api/amistades/amigos/{usuario_id}` | Autenticado | Eliminar un amigo |
+
+### Bloqueos — `/api/bloqueos`
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| GET | `/api/bloqueos` | Autenticado | Usuarios que he bloqueado |
+| POST | `/api/bloqueos/{usuario_id}` | Autenticado | Bloquear (borra seguimientos y amistad) |
+| DELETE | `/api/bloqueos/{usuario_id}` | Autenticado | Desbloquear |
+
+\* Sin token solo si el perfil es público.
 
 ### Soporte — prefijo `/api`
 

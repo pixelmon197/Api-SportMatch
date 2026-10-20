@@ -6,7 +6,7 @@ from models.ciudad import Ciudad
 from models.archivo import Archivo, TIPOS_ARCHIVO, EXTENSIONES_PERMITIDAS, TAMANO_MAXIMO_BYTES
 from models.usuario import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from models.perfil import Perfil, VISIBILIDADES, BIOGRAFIA_MAX
-from models.social import Amistad, Bloqueo, ESTADOS_AMISTAD
+from models.social import Amistad, Bloqueo, Seguidor, ESTADOS_AMISTAD
 from models.token_verificacion import TokenVerificacion, TIPOS_TOKEN
 from models.dispositivo import Dispositivo
 from models.aceptacion_legal import AceptacionLegal
@@ -84,6 +84,7 @@ __all__ = [
     "BIOGRAFIA_MAX",
     "Amistad",
     "Bloqueo",
+    "Seguidor",
     "ESTADOS_AMISTAD",
     "TIPOS_ARCHIVO",
     "EXTENSIONES_PERMITIDAS",

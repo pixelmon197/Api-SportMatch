@@ -1,12 +1,10 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required, verify_jwt_in_request
+from flask_jwt_extended import jwt_required
 
 from database import db
 from models import (
-    Amistad,
-    Bloqueo,
     Perfil,
     Usuario,
     UsuarioDeporte,
@@ -14,47 +12,20 @@ from models import (
     BIOGRAFIA_MAX,
 )
 from utils.auth import get_usuario_actual
+from utils.social import (
+    contadores,
+    error_de_acceso_al_perfil,
+    perfil_o_valores_por_defecto,
+    relacion_con,
+    son_amigos,
+    usuario_que_consulta,
+)
 from utils.validaciones import validar_archivo
 
 perfiles_bp = Blueprint("perfiles", __name__, url_prefix="/api/perfiles")
 
 
 # ============ Utilidades ============
-
-def _usuario_que_consulta():
-    """Quien hace la petición, o None si no mandó token (los perfiles
-    públicos se pueden ver sin iniciar sesión)."""
-    verify_jwt_in_request(optional=True)
-    identidad = get_jwt_identity()
-    return Usuario.query.get(int(identidad)) if identidad else None
-
-
-def _son_amigos(a_id, b_id):
-    """Amistad aceptada en cualquiera de los dos sentidos."""
-    return (
-        Amistad.query.filter(
-            Amistad.estado == "aceptada",
-            db.or_(
-                db.and_(Amistad.usuario_id == a_id, Amistad.amigo_id == b_id),
-                db.and_(Amistad.usuario_id == b_id, Amistad.amigo_id == a_id),
-            ),
-        ).first()
-        is not None
-    )
-
-
-def _hay_bloqueo(a_id, b_id):
-    """¿Alguno de los dos bloqueó al otro?"""
-    return (
-        Bloqueo.query.filter(
-            db.or_(
-                db.and_(Bloqueo.bloqueador_id == a_id, Bloqueo.bloqueado_id == b_id),
-                db.and_(Bloqueo.bloqueador_id == b_id, Bloqueo.bloqueado_id == a_id),
-            )
-        ).first()
-        is not None
-    )
-
 
 def _perfil_propio(usuario):
     """El perfil del usuario; si todavía no tiene fila en `perfiles` (se
@@ -66,22 +37,6 @@ def _perfil_propio(usuario):
         db.session.add(perfil)
         db.session.commit()
     return perfil
-
-
-def _perfil_o_valores_por_defecto(usuario):
-    """Para consultar el perfil de OTRA persona sin escribir en la base en
-    una petición GET: si no tiene fila, se arma uno con los defaults (no
-    se guarda)."""
-    perfil = Perfil.query.get(usuario.id)
-    if perfil:
-        return perfil
-    return Perfil(
-        usuario_id=usuario.id,
-        visibilidad_perfil="publico",
-        visibilidad_ubicacion="amigos",
-        quien_puede_escribir="publico",
-        aparecer_en_cercanos=True,
-    )
 
 
 def _datos_publicos_usuario(usuario):
@@ -105,37 +60,31 @@ def _vista_completa(usuario, perfil):
     data = usuario.to_dict()
     data["perfil"] = perfil.to_dict(con_ubicacion=True, con_ajustes=True)
     data["deportes"] = _deportes_de(usuario.id)
+    data["contadores"] = contadores(usuario.id)
     return data
 
 
 def _vista_para(consulta, usuario, perfil):
     """Aplica las reglas de visibilidad. Regresa (respuesta, codigo_http)."""
-    es_dueno = consulta is not None and consulta.id == usuario.id
-    es_admin = consulta is not None and consulta.rol == "administrador"
-    if es_dueno or es_admin:
-        return _vista_completa(usuario, perfil), 200
+    error = error_de_acceso_al_perfil(consulta, usuario, perfil)
+    if error:
+        return {"error": error[0]}, error[1]
 
-    # Cuenta no disponible (suspendida/eliminada): se trata como inexistente.
-    if usuario.estado_cuenta != "activa" or usuario.eliminado_en is not None:
-        return {"error": "Perfil no encontrado"}, 404
+    es_dueno_o_admin = consulta is not None and (consulta.id == usuario.id or consulta.rol == "administrador")
+    if es_dueno_o_admin:
+        data = _vista_completa(usuario, perfil)
+        data["relacion"] = relacion_con(consulta, usuario)
+        return data, 200
 
-    # Bloqueos en cualquier sentido: tampoco se revela que el perfil existe.
-    if consulta is not None and _hay_bloqueo(consulta.id, usuario.id):
-        return {"error": "Perfil no encontrado"}, 404
-
-    amigos = consulta is not None and _son_amigos(consulta.id, usuario.id)
-
-    if perfil.visibilidad_perfil == "privado":
-        return {"error": "Este perfil es privado"}, 403
-    if perfil.visibilidad_perfil == "amigos" and not amigos:
-        return {"error": "Este perfil solo es visible para sus amigos"}, 403
-
+    amigos = consulta is not None and son_amigos(consulta.id, usuario.id)
     ver_ubicacion = perfil.visibilidad_ubicacion == "publico" or (
         perfil.visibilidad_ubicacion == "amigos" and amigos
     )
     data = _datos_publicos_usuario(usuario)
     data["perfil"] = perfil.to_dict(con_ubicacion=ver_ubicacion, con_ajustes=False)
     data["deportes"] = _deportes_de(usuario.id)
+    data["contadores"] = contadores(usuario.id)
+    data["relacion"] = relacion_con(consulta, usuario)
     return data, 200
 
 
@@ -242,7 +191,7 @@ def ver_perfil(usuario_id):
     usuario = Usuario.query.get(usuario_id)
     if not usuario:
         return jsonify({"error": "Perfil no encontrado"}), 404
-    respuesta, codigo = _vista_para(_usuario_que_consulta(), usuario, _perfil_o_valores_por_defecto(usuario))
+    respuesta, codigo = _vista_para(usuario_que_consulta(), usuario, perfil_o_valores_por_defecto(usuario))
     return jsonify(respuesta), codigo
 
 
@@ -253,5 +202,5 @@ def ver_perfil_por_nombre_usuario(nombre_usuario):
     usuario = Usuario.query.filter_by(nombre_usuario=nombre_usuario.strip().lower()).first()
     if not usuario:
         return jsonify({"error": "Perfil no encontrado"}), 404
-    respuesta, codigo = _vista_para(_usuario_que_consulta(), usuario, _perfil_o_valores_por_defecto(usuario))
+    respuesta, codigo = _vista_para(usuario_que_consulta(), usuario, perfil_o_valores_por_defecto(usuario))
     return jsonify(respuesta), codigo
