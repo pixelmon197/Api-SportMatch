@@ -9,7 +9,7 @@ ni variables de entorno previas — cada script configura su propia
 ## Requisitos
 
 Los mismos paquetes del proyecto (`Flask`, `Flask-SQLAlchemy`,
-`Flask-JWT-Extended`, `Flask-Cors`, etc.). Si ya corres la API
+`Flask-JWT-Extended`, `Flask-Cors`, `Pillow`, etc.). Si ya corres la API
 normalmente, ya los tienes. Si no:
 
 ```bash
@@ -30,6 +30,8 @@ python3 test/test_inscripciones.py
 python3 test/test_deportes.py
 python3 test/test_soporte.py
 python3 test/test_administradores.py
+python3 test/test_archivos.py
+python3 test/test_perfiles.py
 ```
 
 O, parado dentro de `test/`:
@@ -58,6 +60,8 @@ detuvo.
 | `test_deportes.py` | Catálogo de deportes y deportes por usuario |
 | `test_soporte.py` | Reportes y tickets de soporte |
 | `test_administradores.py` | Rol de administrador y sus permisos |
+| `test_archivos.py` | Subida de imágenes/videos/PDF/GPX, límites, y uso en eventos, organizadores y rutas |
+| `test_perfiles.py` | Perfil propio, ubicación y visibilidad (público/amigos/privado, amistad, bloqueos) |
 
 ## Notas
 

@@ -30,6 +30,42 @@ components:
         telefono: { type: string, pattern: '^[0-9]{7,15}$', example: "5512345678" }
         ciudad: { type: object, nullable: true }
         creado_en: { type: string, format: date-time, example: "2026-05-10T14:30:00" }
+    Perfil:
+      type: object
+      description: Datos del perfil (tabla `perfiles`). Su llave es el usuario_id. `visibilidad_*`, `quien_puede_escribir` y `aparecer_en_cercanos` solo los ve su dueño; la ubicación solo la ve quien `visibilidad_ubicacion` permita.
+      properties:
+        usuario_id: { type: integer, example: 1 }
+        biografia: { type: string, nullable: true, maxLength: 500, example: "Corro los fines de semana y me encanta el trail" }
+        avatar_id: { type: integer, nullable: true, example: 1 }
+        avatar_url: { type: string, nullable: true, example: "/static/uploads/imagen/3f2a9c1e5b7d4a8f9e0c1d2b3a4f5e6d.png" }
+        portada_id: { type: integer, nullable: true, example: 2 }
+        portada_url: { type: string, nullable: true, example: "/static/uploads/imagen/9b1d7e4c2a6f4c8d8e3f5a7b9c1d2e4f.png" }
+        visibilidad_perfil: { type: string, enum: [publico, amigos, privado], example: "publico" }
+        visibilidad_ubicacion: { type: string, enum: [publico, amigos, privado], example: "amigos" }
+        quien_puede_escribir: { type: string, enum: [publico, amigos, privado], example: "publico" }
+        aparecer_en_cercanos: { type: boolean, example: true }
+        latitud: { type: number, nullable: true, example: 19.2826 }
+        longitud: { type: number, nullable: true, example: -99.6557 }
+        ubicacion_actualizada_en: { type: string, format: date-time, nullable: true, example: "2026-10-13T14:30:00" }
+        actualizado_en: { type: string, format: date-time, example: "2026-10-13T14:30:00" }
+    PerfilCompleto:
+      description: Lo que ve el dueño del perfil (o un admin) - los datos de su cuenta más su perfil y sus deportes.
+      allOf:
+        - { $ref: "#/components/schemas/Usuario" }
+        - type: object
+          properties:
+            perfil: { $ref: "#/components/schemas/Perfil" }
+            deportes: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
+    PerfilPublico:
+      type: object
+      description: Lo que ve un tercero. Nunca incluye correo, teléfono, fecha de nacimiento, sexo ni rol.
+      properties:
+        id: { type: integer, example: 1 }
+        nombre_completo: { type: string, example: "Ana Pérez" }
+        nombre_usuario: { type: string, example: "anaperez" }
+        ciudad: { type: object, nullable: true }
+        perfil: { $ref: "#/components/schemas/Perfil" }
+        deportes: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
     Archivo:
       type: object
       description: Archivo ya subido con POST /api/archivos. Su `id` es lo que se manda como portada_id, logo_id, gpx_archivo_id o archivo_id.
@@ -983,6 +1019,117 @@ paths:
         - { name: boleto_id, in: path, required: true, schema: { type: integer, example: 1 } }
       responses:
         "204": { description: Boleto eliminado }
+
+  /api/perfiles/me:
+    get:
+      summary: Mi usuario y mi perfil juntos (con mi ubicación y mis ajustes de privacidad)
+      tags: [Perfiles]
+      description: Si todavía no tenías perfil, se crea con los valores por defecto (perfil público, ubicación solo para amigos).
+      responses:
+        "200":
+          description: Mi perfil
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+    put:
+      summary: Editar mi perfil (biografía, avatar, portada y privacidad)
+      tags: [Perfiles]
+      description: >
+        Todos los campos son opcionales, solo cambia lo que se mande. Con
+        `null` en `biografia`, `avatar_id` o `portada_id` se borran. Los
+        ids de imagen se obtienen con POST /api/archivos. Los datos de la
+        cuenta (nombre, teléfono, ciudad, sexo) se editan en PUT /api/usuarios/me.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                biografia: { type: string, nullable: true, maxLength: 500, example: "Corro los fines de semana y me encanta el trail" }
+                avatar_id: { type: integer, nullable: true, minimum: 1, example: 1, description: "Id de una imagen subida con POST /api/archivos." }
+                portada_id: { type: integer, nullable: true, minimum: 1, example: 2, description: "Id de una imagen subida con POST /api/archivos." }
+                visibilidad_perfil: { type: string, enum: [publico, amigos, privado], example: "publico", description: "Quién puede ver mi perfil." }
+                visibilidad_ubicacion: { type: string, enum: [publico, amigos, privado], example: "amigos", description: "Quién puede ver mi ubicación." }
+                quien_puede_escribir: { type: string, enum: [publico, amigos, privado], example: "publico", description: "Quién me puede escribir mensajes." }
+                aparecer_en_cercanos: { type: boolean, example: true }
+      responses:
+        "200":
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+        "400": { description: Valor inválido (visibilidad, biografía muy larga, avatar/portada que no es una imagen existente) }
+
+  /api/perfiles/me/ubicacion:
+    put:
+      summary: Guardar mi ubicación actual
+      tags: [Perfiles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitud, longitud]
+              properties:
+                latitud: { type: number, minimum: -90, maximum: 90, example: 19.2826 }
+                longitud: { type: number, minimum: -180, maximum: 180, example: -99.6557 }
+      responses:
+        "200":
+          description: Ubicación guardada (también se actualiza `ubicacion_actualizada_en`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+        "400": { description: Faltan coordenadas, no son números o están fuera de rango }
+    delete:
+      summary: Borrar mi ubicación guardada
+      tags: [Perfiles]
+      responses:
+        "200":
+          description: Ubicación borrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+
+  /api/perfiles/{usuario_id}:
+    get:
+      summary: Ver el perfil de otro usuario (respeta visibilidad, amistad y bloqueos)
+      tags: [Perfiles]
+      security: [{}, { bearerAuth: [] }]
+      description: >
+        Se puede consultar sin iniciar sesión si el perfil es público. Con
+        token, además se reconoce a los amigos. 403 si el perfil es privado
+        o solo para amigos; 404 si no existe, si la cuenta está suspendida o
+        eliminada, o si hay un bloqueo entre ambos (en cualquier sentido, para
+        no revelar que existe). El dueño y los administradores ven siempre todo.
+      parameters:
+        - { name: usuario_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Perfil (el dueño o un admin recibe PerfilCompleto; los demás, PerfilPublico)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilPublico" }
+        "403": { description: Perfil privado o solo para amigos }
+        "404": { description: Perfil no encontrado }
+
+  /api/perfiles/usuario/{nombre_usuario}:
+    get:
+      summary: Ver un perfil buscando por nombre de usuario (sin importar mayúsculas)
+      tags: [Perfiles]
+      security: [{}, { bearerAuth: [] }]
+      description: Mismas reglas de visibilidad que GET /api/perfiles/{usuario_id}.
+      parameters:
+        - { name: nombre_usuario, in: path, required: true, schema: { type: string, example: "anaperez" } }
+      responses:
+        "200":
+          description: Perfil
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilPublico" }
+        "403": { description: Perfil privado o solo para amigos }
+        "404": { description: Perfil no encontrado }
 
   /api/archivos:
     post:

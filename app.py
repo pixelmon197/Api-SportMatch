@@ -16,6 +16,7 @@ from routes.inscripciones import inscripciones_bp
 from routes.organizadores import organizadores_bp
 from routes.soporte import soporte_bp
 from routes.archivos import archivos_bp
+from routes.perfiles import perfiles_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -45,6 +46,7 @@ def create_app(config_class=Config):
     app.register_blueprint(organizadores_bp)
     app.register_blueprint(soporte_bp)
     app.register_blueprint(archivos_bp)
+    app.register_blueprint(perfiles_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,
