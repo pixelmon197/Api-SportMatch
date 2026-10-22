@@ -28,3 +28,12 @@ class Config:
     # 8 MB para imágenes, se valida en routes/archivos.py). Flask responde 413
     # solo si se supera este tope, antes de leer el archivo completo.
     MAX_CONTENT_LENGTH = 210 * 1024 * 1024
+
+    # Pagos
+    # Comisión de la plataforma (%) cuando no hay ninguna vigente en la tabla
+    # `comisiones`. Un admin la define con POST /api/comisiones.
+    COMISION_POR_DEFECTO = os.environ.get("COMISION_POR_DEFECTO", "10")
+    # Pasarela de tarjeta SIMULADA (POST /api/pagos/{id}/simular-pago). Sirve
+    # para probar el flujo sin una pasarela real. En producción poner
+    # SIMULAR_PASARELA=false: así nadie puede marcar un pago como pagado sin pagar.
+    SIMULAR_PASARELA = os.environ.get("SIMULAR_PASARELA", "true").strip().lower() in ("1", "true", "si", "sí", "yes")

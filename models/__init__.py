@@ -7,6 +7,25 @@ from models.archivo import Archivo, TIPOS_ARCHIVO, EXTENSIONES_PERMITIDAS, TAMAN
 from models.usuario import Usuario, ROLES_VALIDOS, ESTADOS_CUENTA, SEXOS_VALIDOS
 from models.perfil import Perfil, VISIBILIDADES, BIOGRAFIA_MAX
 from models.social import Amistad, Bloqueo, Seguidor, ESTADOS_AMISTAD
+from models.pago import (
+    Pago,
+    PagoInscripcion,
+    Reembolso,
+    Comision,
+    Liquidacion,
+    Cupon,
+    CuponUso,
+    METODOS_PAGO,
+    METODO_GRATUITO,
+    PASARELA_SIMULADA,
+    PASARELA_MANUAL,
+    PASARELA_NINGUNA,
+    ESTADOS_PAGO,
+    ESTADOS_REEMBOLSO,
+    ESTADOS_LIQUIDACION,
+    TIPOS_DESCUENTO,
+    CONCEPTOS,
+)
 from models.token_verificacion import TokenVerificacion, TIPOS_TOKEN
 from models.dispositivo import Dispositivo
 from models.aceptacion_legal import AceptacionLegal
@@ -79,6 +98,23 @@ from models.soporte import (
 __all__ = [
     "Ciudad",
     "Archivo",
+    "Pago",
+    "PagoInscripcion",
+    "Reembolso",
+    "Comision",
+    "Liquidacion",
+    "Cupon",
+    "CuponUso",
+    "METODOS_PAGO",
+    "METODO_GRATUITO",
+    "PASARELA_SIMULADA",
+    "PASARELA_MANUAL",
+    "PASARELA_NINGUNA",
+    "ESTADOS_PAGO",
+    "ESTADOS_REEMBOLSO",
+    "ESTADOS_LIQUIDACION",
+    "TIPOS_DESCUENTO",
+    "CONCEPTOS",
     "Perfil",
     "VISIBILIDADES",
     "BIOGRAFIA_MAX",

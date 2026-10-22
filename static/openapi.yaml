@@ -102,6 +102,112 @@ components:
         deportes: { type: array, items: { $ref: "#/components/schemas/UsuarioDeporte" } }
         contadores: { $ref: "#/components/schemas/Contadores" }
         relacion: { $ref: "#/components/schemas/Relacion" }
+    PagoItem:
+      type: object
+      properties:
+        inscripcion_id: { type: integer, example: 1 }
+        evento_id: { type: integer, example: 1 }
+        evento_titulo: { type: string, example: "5K Nocturna" }
+        monto: { type: number, example: 240.00, description: "Lo que se pagó por esta inscripción (ya con descuento)." }
+        comision_plataforma: { type: number, example: 30.00, description: "Solo la ven admins y organizadores, nunca quien paga." }
+        monto_organizador: { type: number, example: 210.00, description: "Solo la ven admins y organizadores." }
+        liquidacion_id: { type: integer, nullable: true, example: null, description: "Solo la ven admins y organizadores." }
+    Pago:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        usuario_id: { type: integer, example: 1 }
+        metodo: { type: string, enum: [tarjeta, transferencia, efectivo, gratuito], example: "tarjeta" }
+        pasarela: { type: string, enum: [simulada, manual, ninguna], example: "simulada" }
+        estado: { type: string, enum: [pendiente, pagado, fallido, cancelado, reembolsado], example: "pagado" }
+        monto_total: { type: number, example: 240.00 }
+        moneda: { type: string, example: "MXN" }
+        referencia_externa: { type: string, nullable: true, example: "SM-00000001", description: "En transferencia/efectivo, la referencia que debe llevar el depósito." }
+        pagado_en: { type: string, format: date-time, nullable: true, example: "2026-10-20T14:30:00" }
+        creado_en: { type: string, format: date-time, example: "2026-10-20T14:25:00" }
+        inscripciones: { type: array, items: { $ref: "#/components/schemas/PagoItem" } }
+        cupon: { type: string, nullable: true, example: "MARTA20" }
+        instrucciones: { type: string, description: "Solo al crear el pago, para métodos manuales o simulados." }
+    Cotizacion:
+      type: object
+      description: Lo que costaría pagar esas inscripciones. No incluye la comisión de la plataforma.
+      properties:
+        moneda: { type: string, example: "MXN" }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              inscripcion_id: { type: integer, example: 1 }
+              evento_titulo: { type: string, example: "5K Nocturna" }
+              precio_boleto: { type: number, example: 200.00 }
+              precio_paquete: { type: number, example: 100.00 }
+              precio: { type: number, example: 300.00 }
+              descuento: { type: number, example: 60.00 }
+              monto: { type: number, example: 240.00 }
+        subtotal: { type: number, example: 300.00 }
+        descuento_total: { type: number, example: 60.00 }
+        total: { type: number, example: 240.00 }
+        cupon:
+          type: object
+          nullable: true
+          properties:
+            codigo: { type: string, example: "MARTA20" }
+            tipo_descuento: { type: string, enum: [porcentaje, monto_fijo], example: "porcentaje" }
+            valor: { type: number, example: 20 }
+    Reembolso:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        pago_id: { type: integer, example: 1 }
+        estado: { type: string, enum: [solicitado, aprobado, rechazado], example: "solicitado" }
+        monto: { type: number, example: 240.00 }
+        motivo: { type: string, example: "No puedo asistir" }
+        solicitado_por: { type: integer, example: 1 }
+        aprobado_por: { type: integer, nullable: true, example: null, description: "Admin que lo resolvió (aprobó o rechazó)." }
+        creado_en: { type: string, format: date-time, example: "2026-10-20T14:30:00" }
+        procesado_en: { type: string, format: date-time, nullable: true, example: null }
+    Liquidacion:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        organizador_id: { type: integer, example: 1 }
+        cuenta_cobro_id: { type: integer, example: 1 }
+        estado: { type: string, enum: [pendiente, pagada], example: "pendiente" }
+        periodo_desde: { type: string, format: date, example: "2026-10-01" }
+        periodo_hasta: { type: string, format: date, example: "2026-10-31" }
+        monto_bruto: { type: number, example: 420.00 }
+        monto_comision: { type: number, example: 52.50 }
+        monto_neto: { type: number, example: 367.50, description: "Lo que se le paga al organizador." }
+        moneda: { type: string, example: "MXN" }
+        referencia_pago: { type: string, nullable: true, example: "SPEI-445566" }
+        pagada_en: { type: string, format: date-time, nullable: true, example: null }
+        creado_en: { type: string, format: date-time, example: "2026-10-31T18:00:00" }
+        pagos: { type: array, description: "Solo en el detalle.", items: { $ref: "#/components/schemas/PagoItem" } }
+    Cupon:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        codigo: { type: string, example: "MARTA20" }
+        descripcion: { type: string, nullable: true, example: "20% de descuento en mis carreras" }
+        tipo_descuento: { type: string, enum: [porcentaje, monto_fijo], example: "porcentaje" }
+        concepto: { type: string, nullable: true, enum: [inscripcion], example: null }
+        organizador_id: { type: integer, nullable: true, example: 1, description: "Null = cupón de la plataforma (vale en cualquier evento)." }
+        valor: { type: number, example: 20 }
+        vigente_desde: { type: string, format: date-time, example: "2026-10-01T00:00:00" }
+        vigente_hasta: { type: string, format: date-time, nullable: true, example: "2026-12-31T23:59:59" }
+        usos_maximos: { type: integer, nullable: true, example: 100 }
+        usos_por_usuario: { type: integer, example: 1 }
+        activo: { type: boolean, example: true }
+        usos: { type: integer, example: 3, description: "Cuántas veces se ha usado (pagos pendientes o pagados)." }
+    Comision:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        concepto: { type: string, enum: [inscripcion], example: "inscripcion" }
+        porcentaje: { type: number, example: 12.5 }
+        vigente_desde: { type: string, format: date, example: "2026-01-01" }
+        vigente_hasta: { type: string, format: date, nullable: true, example: null }
     Archivo:
       type: object
       description: Archivo ya subido con POST /api/archivos. Su `id` es lo que se manda como portada_id, logo_id, gpx_archivo_id o archivo_id.
@@ -1524,6 +1630,564 @@ paths:
         "204": { description: Usuario desbloqueado }
         "404": { description: No lo tenías bloqueado }
 
+  /api/pagos/cotizar:
+    post:
+      summary: Cuánto costaría pagar esas inscripciones (con cupón opcional). No crea nada
+      tags: [Pagos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inscripcion_ids]
+              properties:
+                inscripcion_ids: { type: array, items: { type: integer, example: 1 }, description: "Mis inscripciones en estado pendiente_pago (todas en la misma moneda)." }
+                cupon_codigo: { type: string, example: "MARTA20", description: "Opcional." }
+      responses:
+        "200":
+          description: Desglose de precios (sin la comisión de la plataforma)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cotizacion" }
+        "400": { description: Lista de inscripciones vacía o inválida }
+        "404": { description: Una inscripción no existe o no es tuya, o el cupón no existe }
+        "409": { description: Inscripción en lista de espera o ya pagada, evento no publicado, o cupón inactivo, vencido, agotado o que no aplica }
+
+  /api/pagos:
+    post:
+      summary: Pagar una o varias inscripciones mías (el monto lo calcula el servidor)
+      tags: [Pagos]
+      description: >
+        Crea el pago en estado `pendiente`. Si el total es $0 (evento gratis
+        o cupón del 100%) queda `pagado` de inmediato y no hace falta `metodo`.
+        **tarjeta** usa la pasarela simulada (confirma con POST
+        /api/pagos/{id}/simular-pago). **transferencia** y **efectivo** quedan
+        pendientes con una referencia `SM-########` que debe llevar el depósito,
+        y un admin los confirma con PUT /api/pagos/{id}/confirmar. Al pagarse,
+        las inscripciones pasan de `pendiente_pago` a `inscrito`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inscripcion_ids]
+              properties:
+                inscripcion_ids: { type: array, items: { type: integer, example: 1 } }
+                metodo: { type: string, enum: [tarjeta, transferencia, efectivo], example: "tarjeta", description: "Obligatorio salvo que el total sea $0." }
+                cupon_codigo: { type: string, example: "MARTA20" }
+      responses:
+        "201":
+          description: Pago creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pago" }
+        "400": { description: metodo inválido o faltante (con total mayor a $0) }
+        "404": { description: Inscripción o cupón inexistente }
+        "409": { description: Misma lista de causas que /pagos/cotizar; incluye que la inscripción ya tenga un pago (viene su `pago_id`) }
+        "501": { description: Pago con tarjeta no disponible (pasarela simulada apagada y sin pasarela real) }
+    get:
+      summary: Todos los pagos (solo admin)
+      tags: [Pagos]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [pendiente, pagado, fallido, cancelado, reembolsado] } }
+        - { name: metodo, in: query, schema: { type: string, enum: [tarjeta, transferencia, efectivo, gratuito] } }
+        - { name: usuario_id, in: query, schema: { type: integer, example: 1 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada (incluye la comisión de cada inscripción)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagos: { type: array, items: { $ref: "#/components/schemas/Pago" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/pagos/me:
+    get:
+      summary: Mis pagos, del más reciente al más antiguo
+      tags: [Pagos]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [pendiente, pagado, fallido, cancelado, reembolsado] } }
+        - { name: metodo, in: query, schema: { type: string, enum: [tarjeta, transferencia, efectivo, gratuito] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagos: { type: array, items: { $ref: "#/components/schemas/Pago" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/pagos/{pago_id}:
+    get:
+      summary: Ver un pago (quien lo hizo o un admin; el admin ve además la comisión)
+      tags: [Pagos]
+      parameters:
+        - { name: pago_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Pago con sus inscripciones
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pago" }
+        "404": { description: No existe o no es tuyo }
+
+  /api/pagos/{pago_id}/simular-pago:
+    post:
+      summary: SOLO PRUEBAS - simular la respuesta de la pasarela de tarjeta
+      tags: [Pagos]
+      description: Solo quien hizo el pago. Se apaga con SIMULAR_PASARELA=false (responde 403). Con `rechazado` el pago queda `fallido`, el cupón se libera y se puede reintentar.
+      parameters:
+        - { name: pago_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resultado: { type: string, enum: [aprobado, rechazado], default: aprobado, example: "aprobado" }
+      responses:
+        "200":
+          description: Pago actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pago" }
+        "403": { description: Pasarela simulada desactivada, o el pago no es tuyo }
+        "409": { description: El pago no es de la pasarela simulada, no está pendiente, o una inscripción ya no está pendiente de pago }
+
+  /api/pagos/{pago_id}/confirmar:
+    put:
+      summary: Confirmar un pago pendiente, p. ej. al verificar una transferencia (solo admin)
+      tags: [Pagos]
+      parameters:
+        - { name: pago_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                referencia_externa: { type: string, maxLength: 100, example: "SPEI-998877", description: "Folio del depósito (opcional)." }
+      responses:
+        "200":
+          description: Pago confirmado; sus inscripciones quedan `inscrito`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pago" }
+        "409": { description: El pago no está pendiente, o una inscripción ya no está pendiente de pago }
+
+  /api/pagos/{pago_id}/cancelar:
+    put:
+      summary: Cancelar un pago pendiente (quien lo hizo o un admin)
+      tags: [Pagos]
+      description: Las inscripciones siguen en `pendiente_pago` para poder pagarlas de nuevo, y el cupón se libera. Un pago ya pagado no se cancela, se reembolsa.
+      parameters:
+        - { name: pago_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Pago cancelado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pago" }
+        "409": { description: El pago no está pendiente }
+
+  /api/pagos/{pago_id}/reembolsos:
+    post:
+      summary: Pedir que me devuelvan un pago ya pagado (siempre por el total)
+      tags: [Reembolsos]
+      description: El reembolso parcial todavía no está soportado. Lo resuelve un admin.
+      parameters:
+        - { name: pago_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, maxLength: 500, example: "No puedo asistir al evento" }
+      responses:
+        "201":
+          description: Reembolso solicitado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reembolso" }
+        "400": { description: Falta el motivo o es muy largo }
+        "404": { description: El pago no existe o no es tuyo }
+        "409": { description: El pago no está pagado, es gratuito, ya tiene un reembolso, o ya fue incluido en una liquidación al organizador }
+
+  /api/reembolsos/me:
+    get:
+      summary: Reembolsos que solicité
+      tags: [Reembolsos]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [solicitado, aprobado, rechazado] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reembolsos: { type: array, items: { $ref: "#/components/schemas/Reembolso" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/reembolsos:
+    get:
+      summary: Bandeja de reembolsos (solo admin; por defecto los `solicitado`)
+      tags: [Reembolsos]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [solicitado, aprobado, rechazado], default: solicitado } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reembolsos: { type: array, items: { $ref: "#/components/schemas/Reembolso" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/reembolsos/{reembolso_id}/aprobar:
+    put:
+      summary: Aprobar un reembolso (solo admin)
+      tags: [Reembolsos]
+      description: El pago queda `reembolsado` y sus inscripciones `cancelado` (y sube la lista de espera). Aquí se REGISTRA la decisión; devolver el dinero por la pasarela o el banco es un paso aparte, no hay pasarela real conectada.
+      parameters:
+        - { name: reembolso_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Reembolso aprobado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reembolso" }
+        "409": { description: Ya estaba resuelto, el pago ya no está pagado, o ya fue liquidado al organizador }
+
+  /api/reembolsos/{reembolso_id}/rechazar:
+    put:
+      summary: Rechazar un reembolso (solo admin)
+      tags: [Reembolsos]
+      parameters:
+        - { name: reembolso_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Reembolso rechazado (el pago sigue pagado)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reembolso" }
+        "409": { description: Ya estaba resuelto }
+
+  /api/organizadores/{organizador_id}/pagos:
+    get:
+      summary: Lo cobrado por los eventos de un organizador (miembros con permisos o admin)
+      tags: [Pagos]
+      description: Solo pagos `pagado`. Cada fila trae la comisión de la plataforma y lo que le toca al organizador; `resumen` suma todo lo que cumple el filtro (no solo la página).
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer, example: 1 } }
+        - { name: por_liquidar, in: query, schema: { type: boolean, example: false }, description: "Solo lo que aún no se incluyó en una liquidación." }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada con resumen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagos: { type: array, items: { $ref: "#/components/schemas/PagoItem" } }
+                  resumen:
+                    type: object
+                    properties:
+                      monto_bruto: { type: number, example: 420.00 }
+                      comision_plataforma: { type: number, example: 52.50 }
+                      monto_organizador: { type: number, example: 367.50 }
+                      por_liquidar: { type: number, example: 367.50 }
+                  total: { type: integer, example: 2 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+        "403": { description: No perteneces a ese organizador }
+        "404": { description: Organizador no encontrado }
+
+  /api/liquidaciones:
+    post:
+      summary: Armar la liquidación de un organizador para un periodo (solo admin)
+      tags: [Liquidaciones]
+      description: Junta lo cobrado por sus eventos (pagos `pagado`, aún sin liquidar, pagados dentro del periodo, de la moneda indicada) y lo registra para pagarse a una cuenta de cobro verificada. Los pagos de $0 no se incluyen.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizador_id, cuenta_cobro_id, periodo_desde, periodo_hasta]
+              properties:
+                organizador_id: { type: integer, example: 1 }
+                cuenta_cobro_id: { type: integer, example: 1, description: "Debe ser una cuenta de ese organizador, verificada." }
+                periodo_desde: { type: string, format: date, example: "2026-10-01" }
+                periodo_hasta: { type: string, format: date, example: "2026-10-31" }
+                moneda: { type: string, minLength: 3, maxLength: 3, default: MXN, example: "MXN" }
+      responses:
+        "201":
+          description: Liquidación creada (con los pagos incluidos)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Liquidacion" }
+        "400": { description: Datos faltantes o inválidos, o la cuenta no es de ese organizador }
+        "409": { description: Cuenta sin verificar, o no hay pagos pendientes de liquidar en ese periodo }
+    get:
+      summary: Todas las liquidaciones (solo admin)
+      tags: [Liquidaciones]
+      parameters:
+        - { name: organizador_id, in: query, schema: { type: integer, example: 1 } }
+        - { name: estado, in: query, schema: { type: string, enum: [pendiente, pagada] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  liquidaciones: { type: array, items: { $ref: "#/components/schemas/Liquidacion" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+
+  /api/liquidaciones/{liquidacion_id}:
+    get:
+      summary: Detalle de una liquidación con sus pagos (admin o miembro con permisos del organizador)
+      tags: [Liquidaciones]
+      parameters:
+        - { name: liquidacion_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      responses:
+        "200":
+          description: Liquidación
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Liquidacion" }
+        "404": { description: No existe o no es de tu organizador }
+
+  /api/liquidaciones/{liquidacion_id}/pagar:
+    put:
+      summary: Registrar que ya se le pagó al organizador (solo admin)
+      tags: [Liquidaciones]
+      parameters:
+        - { name: liquidacion_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [referencia_pago]
+              properties:
+                referencia_pago: { type: string, maxLength: 100, example: "SPEI-445566" }
+      responses:
+        "200":
+          description: Liquidación pagada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Liquidacion" }
+        "400": { description: Falta la referencia }
+        "409": { description: Ya estaba pagada }
+
+  /api/organizadores/{organizador_id}/liquidaciones:
+    get:
+      summary: Liquidaciones de un organizador (miembros con permisos o admin)
+      tags: [Liquidaciones]
+      parameters:
+        - { name: organizador_id, in: path, required: true, schema: { type: integer, example: 1 } }
+        - { name: estado, in: query, schema: { type: string, enum: [pendiente, pagada] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  liquidaciones: { type: array, items: { $ref: "#/components/schemas/Liquidacion" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+        "403": { description: No perteneces a ese organizador }
+
+  /api/comisiones/vigente:
+    get:
+      summary: El porcentaje que hoy se queda la plataforma
+      tags: [Comisiones y cupones]
+      description: "`por_defecto: true` significa que no hay ninguna registrada y se usa el valor de configuración (COMISION_POR_DEFECTO, 10%)."
+      parameters:
+        - { name: concepto, in: query, schema: { type: string, enum: [inscripcion], default: inscripcion } }
+      responses:
+        "200":
+          description: Comisión vigente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  concepto: { type: string, example: "inscripcion" }
+                  porcentaje: { type: number, example: 12.5 }
+                  por_defecto: { type: boolean, example: false }
+
+  /api/comisiones:
+    get:
+      summary: Historial de comisiones (solo admin)
+      tags: [Comisiones y cupones]
+      responses:
+        "200":
+          description: Lista
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Comision" } }
+    post:
+      summary: Definir una nueva comisión (solo admin)
+      tags: [Comisiones y cupones]
+      description: Cierra la anterior del mismo concepto el día antes de la nueva. Solo aplica a pagos creados a partir de la vigencia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [concepto, porcentaje]
+              properties:
+                concepto: { type: string, enum: [inscripcion], example: "inscripcion" }
+                porcentaje: { type: number, minimum: 0, maximum: 100, example: 12.5 }
+                vigente_desde: { type: string, format: date, example: "2026-11-01", description: "Opcional, por defecto hoy. Debe ser posterior a la de la comisión actual." }
+      responses:
+        "201":
+          description: Comisión creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Comision" }
+        "400": { description: concepto, porcentaje o fecha inválidos }
+        "409": { description: vigente_desde no es posterior al de la comisión actual }
+
+  /api/cupones:
+    post:
+      summary: Crear un cupón de descuento (admin, o dueño/administrador de un organizador para sus eventos)
+      tags: [Comisiones y cupones]
+      description: Un admin puede crear cupones de la plataforma (sin `organizador_id`, valen en cualquier evento). Un organizador debe mandar su `organizador_id` y el cupón solo vale en sus eventos. El código se guarda en mayúsculas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, tipo_descuento, valor]
+              properties:
+                codigo: { type: string, pattern: '^[A-Za-z0-9_-]{3,30}$', example: "MARTA20" }
+                descripcion: { type: string, maxLength: 200, example: "20% de descuento en mis carreras" }
+                tipo_descuento: { type: string, enum: [porcentaje, monto_fijo], example: "porcentaje" }
+                valor: { type: number, exclusiveMinimum: 0, example: 20, description: "Porcentaje (hasta 100) o monto en pesos." }
+                organizador_id: { type: integer, example: 1 }
+                concepto: { type: string, enum: [inscripcion], nullable: true }
+                vigente_desde: { type: string, format: date-time, example: "2026-10-01T00:00:00" }
+                vigente_hasta: { type: string, format: date-time, example: "2026-12-31T23:59:59" }
+                usos_maximos: { type: integer, minimum: 1, example: 100, description: "Tope global (opcional)." }
+                usos_por_usuario: { type: integer, minimum: 1, default: 1, example: 1 }
+                activo: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Cupón creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cupon" }
+        "400": { description: Datos inválidos, o un organizador sin organizador_id }
+        "403": { description: No perteneces a ese organizador }
+        "409": { description: Ya existe un cupón con ese código }
+    get:
+      summary: Listar cupones (admin ve todos; un organizador manda su organizador_id)
+      tags: [Comisiones y cupones]
+      parameters:
+        - { name: organizador_id, in: query, schema: { type: integer, example: 1 } }
+        - { name: activo, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1, example: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 } }
+      responses:
+        "200":
+          description: Lista paginada (con el número de `usos`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cupones: { type: array, items: { $ref: "#/components/schemas/Cupon" } }
+                  total: { type: integer, example: 1 }
+                  page: { type: integer, example: 1 }
+                  per_page: { type: integer, example: 20 }
+                  paginas: { type: integer, example: 1 }
+        "400": { description: Un organizador debe mandar organizador_id }
+        "403": { description: No perteneces a ese organizador }
+
+  /api/cupones/{cupon_id}:
+    put:
+      summary: Editar un cupón (el código y el tipo no se pueden cambiar)
+      tags: [Comisiones y cupones]
+      parameters:
+        - { name: cupon_id, in: path, required: true, schema: { type: integer, example: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                descripcion: { type: string, maxLength: 200 }
+                valor: { type: number, exclusiveMinimum: 0, example: 25 }
+                vigente_hasta: { type: string, format: date-time, nullable: true, example: "2026-12-31T23:59:59" }
+                usos_maximos: { type: integer, nullable: true, minimum: 1, example: 200 }
+                usos_por_usuario: { type: integer, minimum: 1, example: 1 }
+                activo: { type: boolean, example: false }
+      responses:
+        "200":
+          description: Cupón actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cupon" }
+        "400": { description: Valor inválido }
+        "403": { description: No tienes permisos sobre este cupón }
+
   /api/archivos:
     post:
       summary: Subir una imagen, video, documento (PDF), GPX o audio. Regresa el `id` que luego se usa en portada_id, logo_id, gpx_archivo_id o archivo_id
@@ -1844,12 +2508,12 @@ paths:
       responses:
         "200": { description: Lista de valoraciones }
 
-  /api/valoraciones/{valoracion_id}/responder:
+  /api/valoraciones/{inscripcion_id}/responder:
     put:
       summary: Responder públicamente a una valoración (organizador; por ahora, admin)
       tags: [Inscripciones y valoraciones]
       parameters:
-        - { name: valoracion_id, in: path, required: true, schema: { type: integer } }
+        - { name: inscripcion_id, in: path, required: true, schema: { type: integer, example: 1 }, description: "Una valoración se identifica por el id de su inscripción (relación 1 a 1)." }
       requestBody:
         required: true
         content:

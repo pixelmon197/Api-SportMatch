@@ -10,6 +10,7 @@ from models import (
     EventoBoleto,
     EventoFecha,
     PaqueteRecuperacion,
+    PagoInscripcion,
     Inscripcion,
     ValoracionEvento,
     CalendarioUsuario,
@@ -18,6 +19,7 @@ from models import (
 )
 from utils.auth import get_usuario_actual, puede_gestionar_evento
 from utils.fechas import parse_time
+from utils.inscripciones import promover_lista_espera
 
 inscripciones_bp = Blueprint("inscripciones", __name__, url_prefix="/api")
 
@@ -242,19 +244,22 @@ def cancelar_inscripcion(inscripcion_id):
     if inscripcion.estado == "cancelado":
         return jsonify({"error": "Esa inscripción ya estaba cancelada"}), 400
 
+    # Con un pago pendiente, confirmarlo después "pagaría" un lugar cancelado:
+    # primero hay que cancelar ese pago. (Si ya estaba pagada, se cancela igual
+    # y el dinero se recupera con POST /api/pagos/{id}/reembolsos.)
+    pago_item = PagoInscripcion.query.get(inscripcion_id)
+    if pago_item is not None and pago_item.pago.estado == "pendiente":
+        return jsonify({
+            "error": f"Esa inscripción tiene un pago pendiente ({pago_item.pago_id}); "
+                     f"cancélalo primero con PUT /api/pagos/{pago_item.pago_id}/cancelar",
+            "pago_id": pago_item.pago_id,
+        }), 409
+
     inscripcion.estado = "cancelado"
     inscripcion.cancelada_en = datetime.now(timezone.utc)
-    db.session.commit()
-
     # Si había alguien en lista de espera para la misma categoría, sube al primero.
-    siguiente = (
-        Inscripcion.query.filter_by(categoria_id=inscripcion.categoria_id, estado="lista_espera")
-        .order_by(Inscripcion.inscrita_en)
-        .first()
-    )
-    if siguiente:
-        siguiente.estado = "pendiente_pago"
-        db.session.commit()
+    promover_lista_espera(inscripcion.categoria_id)
+    db.session.commit()
 
     return jsonify(inscripcion.to_dict()), 200
 

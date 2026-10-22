@@ -7,7 +7,9 @@ Uso:
 """
 from app import create_app
 from database import db
-from models import Ciudad, Usuario
+from datetime import date
+
+from models import Ciudad, Comision, Usuario
 
 
 def seed():
@@ -36,6 +38,13 @@ def seed():
         print("IMPORTANTE: cambia esta contraseña en cuanto inicies sesión.")
     else:
         print("El usuario admin ya existía.")
+
+    # Comisión inicial de la plataforma (10 % por inscripción). Un admin la
+    # cambia después con POST /api/comisiones.
+    if not Comision.query.filter_by(concepto="inscripcion").first():
+        db.session.add(Comision(concepto="inscripcion", porcentaje=10, vigente_desde=date(2026, 1, 1)))
+        db.session.commit()
+        print("Comisión inicial creada: 10 % por inscripción.")
 
 
 if __name__ == "__main__":

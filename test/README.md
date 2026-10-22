@@ -33,6 +33,7 @@ python3 test/test_administradores.py
 python3 test/test_archivos.py
 python3 test/test_perfiles.py
 python3 test/test_social.py
+python3 test/test_pagos.py
 ```
 
 O, parado dentro de `test/`:
@@ -64,6 +65,7 @@ detuvo.
 | `test_archivos.py` | Subida de imágenes/videos/PDF/GPX, límites, y uso en eventos, organizadores y rutas |
 | `test_perfiles.py` | Perfil propio, ubicación y visibilidad (público/amigos/privado, amistad, bloqueos) |
 | `test_social.py` | Seguidores, solicitudes de amistad y bloqueos (y su efecto en perfiles) |
+| `test_pagos.py` | Pagos, cupones, comisiones, reembolsos y liquidaciones (con cálculo exacto del dinero) |
 
 ## Notas
 

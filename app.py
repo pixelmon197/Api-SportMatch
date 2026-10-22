@@ -20,6 +20,9 @@ from routes.perfiles import perfiles_bp
 from routes.seguidores import seguidores_bp
 from routes.amistades import amistades_bp
 from routes.bloqueos import bloqueos_bp
+from routes.pagos import pagos_bp
+from routes.liquidaciones import liquidaciones_bp
+from routes.cupones import cupones_bp
 
 SWAGGER_URL = "/api/docs"
 OPENAPI_SPEC_URL = "/static/openapi.yaml"
@@ -53,6 +56,9 @@ def create_app(config_class=Config):
     app.register_blueprint(seguidores_bp)
     app.register_blueprint(amistades_bp)
     app.register_blueprint(bloqueos_bp)
+    app.register_blueprint(pagos_bp)
+    app.register_blueprint(liquidaciones_bp)
+    app.register_blueprint(cupones_bp)
 
     swagger_ui_bp = get_swaggerui_blueprint(
         SWAGGER_URL,

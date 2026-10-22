@@ -1,6 +1,6 @@
 # Api-SportMatch — Resumen del proyecto y catálogo de endpoints
 
-Última actualización: Fase 15 (seguidores, amistades y bloqueos). Este documento resume
+Última actualización: Fase 16 (pagos). Este documento resume
 todo el trabajo de revisión/reparación hecho sobre la API contra el
 esquema real de Neon (`Neon.sql`), y cataloga **todos los endpoints
 disponibles hasta el momento**.
@@ -43,11 +43,12 @@ regresiones.
 | 13 | Archivos | Nuevo módulo para subir imágenes, videos, PDF, GPX y audio (`/api/archivos`); `portada_id`, `logo_id`, `gpx_archivo_id` y `archivo_id` pasan a ser llaves foráneas reales. Ver `docs/fase13_archivos.md`. |
 | 14 | Perfiles | Nuevo módulo `/api/perfiles`: ver/editar mi perfil, ubicación, y ver el de otros respetando visibilidad (público/amigos/privado), amistad y bloqueos. `perfiles` y `bloqueos` no tienen `id` propio. Ver `docs/fase14_perfiles.md`. |
 | 15 | Seguidores, amistades y bloqueos | 17 endpoints nuevos (`/api/seguidores`, `/api/amistades`, `/api/bloqueos`). Bloquear borra seguimientos y amistad y oculta el perfil (404). Los perfiles ahora traen `contadores` y `relacion`. `seguidores` y `bloqueos` no tienen `id` propio. Ver `docs/fase15_seguidores_amistades_bloqueos.md`. |
+| 16 | Pagos | 25 endpoints nuevos: pagos (tarjeta simulada, transferencia/efectivo confirmados por admin, eventos gratis), reembolsos (totales), comisiones con vigencia, cupones y liquidaciones a organizadores. Neon no tiene `CHECK` de catálogo aquí, así que la API los define. `pagos_inscripciones` no tiene `id` propio. Ver `docs/fase16_pagos.md`. |
 
 ### Pendiente conocido (no bloquea nada hoy)
 
 - `usuarios.firebase_uid` (nuevo en Neon2.sql) todavía no se mapea: solo hará falta si se agrega inicio de sesión con Firebase.
-- Módulos de Neon sin endpoints todavía: pagos, comunidades y tarjetas de conexión, notificaciones, marketplace, publicidad, gamificación y música/video (ver la respuesta de la Fase 13).
+- Módulos de Neon sin endpoints todavía: comunidades y tarjetas de conexión, créditos y puntos, notificaciones, marketplace, publicidad, gamificación y música/video (ver la respuesta de la Fase 13).
 - `AceptacionLegal` y `Dispositivo` tienen modelo pero **ningún endpoint
   implementado todavía**; sus columnas no se han contrastado a fondo
   contra Neon porque no hay código que las use.
@@ -253,6 +254,45 @@ Además, en Organizadores: `GET /api/organizadores/me` (Autenticado) regresa mi 
 | DELETE | `/api/bloqueos/{usuario_id}` | Autenticado | Desbloquear |
 
 \* Sin token solo si el perfil es público.
+
+### Pagos — prefijo `/api`
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/pagos/cotizar` | Autenticado | Cuánto costaría pagar esas inscripciones (con cupón) |
+| POST | `/api/pagos` | Autenticado | Pagar una o varias inscripciones |
+| GET | `/api/pagos/me` | Autenticado | Mis pagos |
+| GET | `/api/pagos` | Admin | Todos los pagos |
+| GET | `/api/pagos/{id}` | Dueño/Admin | Ver un pago |
+| POST | `/api/pagos/{id}/simular-pago` | Dueño | Simular la pasarela de tarjeta (solo pruebas) |
+| PUT | `/api/pagos/{id}/confirmar` | Admin | Confirmar un pago (p. ej. una transferencia) |
+| PUT | `/api/pagos/{id}/cancelar` | Dueño/Admin | Cancelar un pago pendiente |
+| GET | `/api/organizadores/{id}/pagos` | Gestión/Admin | Lo cobrado por un organizador, con resumen |
+
+### Reembolsos
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/pagos/{id}/reembolsos` | Dueño/Admin | Pedir un reembolso (total) |
+| GET | `/api/reembolsos/me` | Autenticado | Mis reembolsos |
+| GET | `/api/reembolsos` | Admin | Bandeja de reembolsos |
+| PUT | `/api/reembolsos/{id}/aprobar` | Admin | Aprobar (cancela las inscripciones) |
+| PUT | `/api/reembolsos/{id}/rechazar` | Admin | Rechazar |
+
+### Liquidaciones, comisiones y cupones
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/liquidaciones` | Admin | Armar la liquidación de un organizador |
+| GET | `/api/liquidaciones` | Admin | Todas las liquidaciones |
+| GET | `/api/liquidaciones/{id}` | Gestión/Admin | Detalle |
+| PUT | `/api/liquidaciones/{id}/pagar` | Admin | Registrar el pago al organizador |
+| GET | `/api/organizadores/{id}/liquidaciones` | Gestión/Admin | Liquidaciones de un organizador |
+| GET | `/api/comisiones/vigente` | Autenticado | Comisión vigente de la plataforma |
+| GET/POST | `/api/comisiones` | Admin | Historial / definir una comisión |
+| POST | `/api/cupones` | Admin/Organizador | Crear un cupón |
+| GET | `/api/cupones` | Admin/Organizador | Listar cupones |
+| PUT | `/api/cupones/{id}` | Admin/Organizador | Editar un cupón |
 
 ### Soporte — prefijo `/api`
 
