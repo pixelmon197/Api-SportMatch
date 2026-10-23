@@ -5,12 +5,14 @@ from flask_jwt_extended import jwt_required
 
 from database import db
 from models import (
+    Archivo,
     Perfil,
     Usuario,
     UsuarioDeporte,
     VISIBILIDADES,
     BIOGRAFIA_MAX,
 )
+from utils.archivos import guardar_archivo_subido
 from utils.auth import get_usuario_actual
 from utils.social import (
     contadores,
@@ -136,6 +138,70 @@ def actualizar_mi_perfil():
             setattr(perfil, campo, data[campo])
     db.session.commit()
     return jsonify(_vista_completa(usuario, perfil)), 200
+
+
+# ============ Foto de perfil (avatar) ============
+
+def _archivo_de_foto_en_request():
+    """Toma la imagen del multipart: campo `foto` (o `archivo`, por
+    consistencia con POST /api/archivos). Regresa None si no vino."""
+    return request.files.get("foto") or request.files.get("archivo")
+
+
+def _guardar_foto_de_perfil(usuario, perfil, archivo):
+    """Sube la imagen (solo tipo `imagen`) y la deja como `avatar_id`.
+    Regresa (respuesta, codigo). Si había una foto anterior propia, se
+    marca como eliminada (borrado suave) para no acumular basura, salvo
+    que esa misma imagen también se use como portada."""
+    registro, error = guardar_archivo_subido(usuario, archivo, tipo="imagen")
+    if error:
+        return {"error": error[0]}, error[1]
+
+    anterior_id = perfil.avatar_id
+    perfil.avatar_id = registro.id
+    if anterior_id and anterior_id != perfil.portada_id:
+        anterior = Archivo.query.filter_by(id=anterior_id).filter(Archivo.eliminado_en.is_(None)).first()
+        if anterior and anterior.propietario_id == usuario.id:
+            anterior.eliminado_en = datetime.now(timezone.utc)
+    db.session.commit()
+    return _vista_completa(usuario, perfil), None
+
+
+@perfiles_bp.route("/me/foto", methods=["POST"])
+@jwt_required()
+def subir_mi_foto():
+    """Sube mi foto de perfil por primera vez (multipart/form-data, campo
+    `foto`). La imagen se guarda en `archivos` y queda como `avatar_id`.
+    Si ya tengo foto responde 409: para cambiarla se usa PUT
+    /api/perfiles/me/foto."""
+    usuario = get_usuario_actual()
+    perfil = _perfil_propio(usuario)
+
+    if perfil.avatar_id:
+        return jsonify({"error": "Ya tienes foto de perfil; para cambiarla usa PUT /api/perfiles/me/foto"}), 409
+    archivo = _archivo_de_foto_en_request()
+    if archivo is None:
+        return jsonify({"error": "Falta la foto (campo 'foto', multipart/form-data)"}), 400
+
+    respuesta, codigo = _guardar_foto_de_perfil(usuario, perfil, archivo)
+    return jsonify(respuesta), codigo or 201
+
+
+@perfiles_bp.route("/me/foto", methods=["PUT"])
+@jwt_required()
+def actualizar_mi_foto():
+    """Reemplaza mi foto de perfil por una nueva (multipart/form-data,
+    campo `foto`). La foto anterior se marca como eliminada. Si todavía no
+    tenía foto, simplemente la crea."""
+    usuario = get_usuario_actual()
+    perfil = _perfil_propio(usuario)
+
+    archivo = _archivo_de_foto_en_request()
+    if archivo is None:
+        return jsonify({"error": "Falta la foto (campo 'foto', multipart/form-data)"}), 400
+
+    respuesta, codigo = _guardar_foto_de_perfil(usuario, perfil, archivo)
+    return jsonify(respuesta), codigo or 200
 
 
 def _es_numero(valor):

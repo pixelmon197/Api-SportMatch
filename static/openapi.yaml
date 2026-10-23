@@ -1203,6 +1203,56 @@ paths:
               schema: { $ref: "#/components/schemas/PerfilCompleto" }
         "400": { description: Valor inválido (visibilidad, biografía muy larga, avatar/portada que no es una imagen existente) }
 
+  /api/perfiles/me/foto:
+    post:
+      summary: Subir mi foto de perfil (primera vez)
+      tags: [Perfiles]
+      description: >
+        Se manda como `multipart/form-data` con el campo `foto` (imagen:
+        jpg, jpeg, png, webp o gif; máximo 8 MB). La imagen se guarda en
+        `archivos` y queda asignada como `avatar_id` de mi perfil. Si ya
+        tengo foto responde 409; para cambiarla se usa PUT.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [foto]
+              properties:
+                foto: { type: string, format: binary, description: "La imagen de perfil." }
+      responses:
+        "201":
+          description: Foto subida; regresa mi perfil completo (con `avatar_id` y `avatar_url`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+        "400": { description: Falta la foto, está vacía, no es una imagen permitida o supera 8 MB }
+        "409": { description: Ya tienes foto de perfil (usa PUT /api/perfiles/me/foto) }
+    put:
+      summary: Actualizar (reemplazar) mi foto de perfil
+      tags: [Perfiles]
+      description: >
+        Igual que el POST, pero reemplaza la foto actual. La foto anterior
+        se marca como eliminada (borrado suave). Si todavía no tenía foto,
+        la crea.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [foto]
+              properties:
+                foto: { type: string, format: binary, description: "La nueva imagen de perfil." }
+      responses:
+        "200":
+          description: Foto actualizada; regresa mi perfil completo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerfilCompleto" }
+        "400": { description: Falta la foto, está vacía, no es una imagen permitida o supera 8 MB }
+
   /api/perfiles/me/ubicacion:
     put:
       summary: Guardar mi ubicación actual
