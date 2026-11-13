@@ -34,3 +34,10 @@ Thumbs.db
 
 # Archivos subidos por los usuarios
 static/uploads/
+
+# Bases SQLite temporales que crean los scripts de test/
+test/*.sqlite3
+*.sqlite3
+
+# Dependencias de Node (newman)
+node_modules/

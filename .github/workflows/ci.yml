@@ -1,0 +1,65 @@
+# Integración continua de Api-SportMatch.
+#
+# Se ejecuta en las máquinas de GitHub (no en el servidor de la API) en cada
+# push y pull request a main/develop. Las pruebas usan SQLite temporal, así
+# que NO se conecta a Neon ni necesita secretos, y no despliega nada: solo
+# valida el código.
+name: CI - Api-SportMatch
+
+on:
+  push:
+    branches: [main, develop, ci/github-actions]
+  pull_request:
+    branches: [main, develop, ci/github-actions]
+  workflow_dispatch: # permite lanzarlo a mano desde la pestaña Actions
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Compilación y pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8
+
+      - name: Análisis estático (errores de sintaxis y nombres no definidos)
+        run: flake8 . --exclude=venv,.venv,node_modules --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Compilación (verifica que todos los .py compilan)
+        run: python -m compileall -q app.py config.py database.py seed.py models routes utils test
+
+      - name: Arranque de la API y prueba de humo (/api/health)
+        env:
+          DATABASE_URL: sqlite:///ci_smoke.sqlite3
+          SECRET_KEY: ci
+          JWT_SECRET_KEY: ci
+        run: |
+          python -c "
+          from app import create_app
+          r = create_app().test_client().get('/api/health')
+          print(r.status_code, r.get_json())
+          assert r.status_code == 200 and r.get_json()['status'] == 'ok'
+          "
+
+      - name: Pruebas de los módulos (test/run_all.py)
+        run: python test/run_all.py

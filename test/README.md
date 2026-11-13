@@ -49,6 +49,18 @@ y termina con una línea `TODAS LAS PRUEBAS DE ... PASARON` si todo salió
 bien. Si algo falla, el traceback señala exactamente en qué `assert` se
 detuvo.
 
+## Ejecutarlos todos de una vez
+
+```bash
+python test/run_all.py
+```
+
+Corre cada script en un proceso separado, muestra `[OK ]` o `[FALLO]` por
+archivo y termina con código 1 si alguno falla. Es el mismo comando que usa
+el pipeline de GitHub Actions (`.github/workflows/ci.yml`) en cada push y
+pull request a `main`/`develop`. Estas pruebas **no** se ejecutan cuando la
+API está en funcionamiento: `app.py` nunca importa nada de `test/`.
+
 ## Qué prueba cada uno
 
 | Archivo | Módulo |

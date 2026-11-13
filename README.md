@@ -52,6 +52,23 @@ Api-SportMatch/
     └── relaciones_completas.md    # Las 135 relaciones entre entidades
 ```
 
+## Requisitos previos
+
+Antes de instalar, asegúrate de tener:
+
+| Herramienta | Para qué se usa | Obligatorio |
+|---|---|---|
+| [Python 3.10+](https://www.python.org/downloads/) | Ejecutar la API (Flask) | Sí |
+| [Git](https://git-scm.com/downloads) | Clonar el repositorio y control de versiones | Sí |
+| Cuenta de [Neon](https://neon.tech/) (PostgreSQL) | Base de datos en la nube usada por `DATABASE_URL` | Sí (o un PostgreSQL propio) |
+| [DBeaver](https://dbeaver.io/download/) / [pgAdmin](https://www.pgadmin.org/download/) | Cliente visual para explorar/consultar la base de datos | No (opcional, solo para administrar la BD) |
+| [Postman](https://www.postman.com/downloads/) / [Insomnia](https://insomnia.rest/download) | Probar los endpoints de la API manualmente | No (opcional, puedes usar Swagger UI) |
+
+**Notas:**
+- No necesitas instalar PostgreSQL en tu máquina si usas Neon (es administrado en la nube); solo necesitas la cadena de conexión (`DATABASE_URL`).
+- Si prefieres PostgreSQL local, puedes instalarlo desde [postgresql.org](https://www.postgresql.org/download/) y usar DBeaver/pgAdmin para crear la base de datos y obtener tu propia `DATABASE_URL`.
+- `pip` viene incluido con Python; no requiere instalación aparte.
+
 ## Instalación
 
 ```bash
