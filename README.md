@@ -144,11 +144,19 @@ Detalle de la imagen, variables de entorno y red: **`docs/docker.md`**.
 ## Integración continua
 
 El workflow `.github/workflows/ci.yml` se ejecuta en cada push y pull
-request a `main`, `develop` y `ci/github-actions`, y también a mano desde la
-pestaña *Actions*. Ejecuta análisis estático con `flake8`, compila todos los
-módulos, hace una prueba de humo a `/api/health` y corre los 14 scripts de
-`test/run_all.py`. Las pruebas usan SQLite temporal, así que **no se conecta
-a Neon ni necesita secretos**, y no despliega nada: solo valida el código.
+request a las ramas de trabajo, y también a mano desde la pestaña *Actions*.
+Tiene tres trabajos encadenados:
+
+| Trabajo | Qué hace | Cuándo |
+|---|---|---|
+| `build-test` | `flake8`, compilación de todos los módulos, prueba de humo a `/api/health` y los 14 scripts de `test/run_all.py`. | Siempre |
+| `docker` | Construye la imagen del `Dockerfile`, levanta el contenedor, espera a que el `HEALTHCHECK` lo marque `healthy` y corre las pruebas dentro. | Si `build-test` pasó |
+| `publicar` | Sube la imagen a `ghcr.io` con las etiquetas `latest` y `sha-xxxxxxx`. | Solo en push a `main` **y** con la variable `PUBLICAR_IMAGEN` en `true` |
+
+Las pruebas usan SQLite temporal, así que **no se conectan a Neon ni
+necesitan secretos**. El trabajo `publicar` está desactivado hasta crear la
+variable `PUBLICAR_IMAGEN` en *Settings → Secrets and variables → Actions →
+Variables*. Nada de esto despliega a Render ni a EC2.
 
 ## Endpoints 
 

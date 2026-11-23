@@ -1,16 +1,21 @@
 # Integración continua de Api-SportMatch.
 #
 # Se ejecuta en las máquinas de GitHub (no en el servidor de la API) en cada
-# push y pull request a main/develop. Las pruebas usan SQLite temporal, así
-# que NO se conecta a Neon ni necesita secretos, y no despliega nada: solo
-# valida el código.
+# push y pull request a las ramas de trabajo. Las pruebas usan SQLite temporal,
+# así que NO se conecta a Neon ni necesita secretos.
+#
+# Trabajos:
+#   build-test     flake8, compilación, prueba de humo y los 14 scripts de test/
+#   docker         construye la imagen del Dockerfile y comprueba /api/health
+#   publicar       sube la imagen a GHCR (desactivado hasta activar la variable
+#                  PUBLICAR_IMAGEN en Settings > Variables)
 name: CI - Api-SportMatch
 
 on:
   push:
-    branches: [main, develop, ci/github-actions]
+    branches: [main, develop, dev, dev-Michel, devOmar, ci/github-actions]
   pull_request:
-    branches: [main, develop, ci/github-actions]
+    branches: [main, develop, dev]
   workflow_dispatch: # permite lanzarlo a mano desde la pestaña Actions
 
 concurrency:
@@ -28,10 +33,10 @@ jobs:
 
     steps:
       - name: Obtener el código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -63,3 +68,110 @@ jobs:
 
       - name: Pruebas de los módulos (test/run_all.py)
         run: python test/run_all.py
+
+  docker:
+    name: Imagen de Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-test # solo se construye la imagen si las pruebas pasaron
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v5
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false # aquí solo se construye; la publicación va en el trabajo "publicar"
+          load: true # deja la imagen disponible para el paso siguiente
+          tags: sportmatch/api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Arrancar el contenedor y comprobar /api/health
+        env:
+          # SQLite dentro del contenedor: la validación no toca la base de Neon.
+          DATABASE_URL: sqlite:///ci_contenedor.sqlite3
+        run: |
+          docker run -d --name sportmatch-ci -p 5000:5000 \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e SECRET_KEY=ci -e JWT_SECRET_KEY=ci \
+            sportmatch/api:ci
+          # El HEALTHCHECK de la imagen tarda unos segundos en marcarla healthy.
+          for i in $(seq 1 30); do
+            estado=$(docker inspect --format '{{.State.Health.Status}}' sportmatch-ci)
+            echo "intento $i: $estado"
+            [ "$estado" = "healthy" ] && break
+            sleep 3
+          done
+          [ "$(docker inspect --format '{{.State.Health.Status}}' sportmatch-ci)" = "healthy" ]
+          curl -fsS http://localhost:5000/api/health
+
+      - name: Pruebas dentro del contenedor
+        run: |
+          docker exec -e DATABASE_URL=sqlite:///ci_contenedor.sqlite3 \
+            sportmatch-ci python test/run_all.py
+
+      - name: Registros del contenedor (siempre, también si algo falló)
+        if: always()
+        run: docker logs sportmatch-ci || true
+
+      - name: Detener el contenedor
+        if: always()
+        run: docker rm -f sportmatch-ci || true
+
+  publicar:
+    name: Publicación de la imagen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: docker
+    # Solo publica desde main, y únicamente si en Settings > Secrets and
+    # variables > Actions > Variables existe PUBLICAR_IMAGEN con el valor
+    # "true". Mientras no se cree esa variable, este trabajo se omite.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.PUBLICAR_IMAGEN == 'true'
+
+    permissions:
+      contents: read
+      packages: write # necesario para subir a ghcr.io
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v5
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Iniciar sesión en GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # token temporal de la ejecución
+
+      - name: Calcular las etiquetas de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # latest para el último main, y sha-xxxxxxx para poder revertir a
+          # una versión concreta.
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
