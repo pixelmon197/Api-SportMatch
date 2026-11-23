@@ -1,0 +1,47 @@
+# Archivos que NO deben entrar en la imagen de Docker.
+# Reducen el tamaño del contexto de construcción y evitan copiar secretos.
+
+# Secretos: la configuración se inyecta con variables de entorno, no con .env
+.env
+.env.*
+!.env.example
+
+# Control de versiones y CI
+.git
+.gitignore
+.github
+
+# Entornos virtuales y dependencias locales
+venv/
+.venv/
+env/
+node_modules/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Bases SQLite temporales que generan los scripts de test/
+*.sqlite3
+test/*.sqlite3
+
+# Archivos subidos por los usuarios (viven en un volumen, no en la imagen)
+static/uploads/
+
+# Documentación y artefactos de Docker
+docs/
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

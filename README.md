@@ -14,6 +14,11 @@ Api-SportMatch/
 ├── seed.py                      # Ciudad demo + primer usuario admin
 ├── requirements.txt
 ├── .env.example
+├── Dockerfile                   # Imagen de la API (multietapa, Gunicorn, usuario sin privilegios)
+├── docker-compose.yml           # Orquestación local: API + PostgreSQL de pruebas (perfil `pruebas`)
+├── .dockerignore
+├── .github/
+│   └── workflows/ci.yml         # Integración continua: flake8, compilación y las 14 pruebas
 ├── static/
 │   └── openapi.yaml             # Spec OpenAPI 3.0 (Fase 2)
 ├── models/
@@ -49,7 +54,9 @@ Api-SportMatch/
 └── docs/
     ├── fase1_analisis.md          # Qué se analizó y por qué se decidió así
     ├── entidades_completas.md     # Catálogo de las 89 entidades del modelo (columnas)
-    └── relaciones_completas.md    # Las 135 relaciones entre entidades
+    ├── relaciones_completas.md    # Las 135 relaciones entre entidades
+    ├── docker.md                  # Contenerización: imagen, compose, variables y verificación
+    └── despliegue_ambientes.md    # Ambientes de desarrollo, pruebas y producción
 ```
 
 ## Requisitos previos
@@ -63,6 +70,7 @@ Antes de instalar, asegúrate de tener:
 | Cuenta de [Neon](https://neon.tech/) (PostgreSQL) | Base de datos en la nube usada por `DATABASE_URL` | Sí (o un PostgreSQL propio) |
 | [DBeaver](https://dbeaver.io/download/) / [pgAdmin](https://www.pgadmin.org/download/) | Cliente visual para explorar/consultar la base de datos | No (opcional, solo para administrar la BD) |
 | [Postman](https://www.postman.com/downloads/) / [Insomnia](https://insomnia.rest/download) | Probar los endpoints de la API manualmente | No (opcional, puedes usar Swagger UI) |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Ejecutar la API en contenedor con `docker compose up -d` | No (opcional, alternativa a instalar Python) |
 
 **Notas:**
 - No necesitas instalar PostgreSQL en tu máquina si usas Neon (es administrado en la nube); solo necesitas la cadena de conexión (`DATABASE_URL`).
@@ -108,6 +116,39 @@ python seed.py
 
 Esto crea `admin@sportmatch.com` / `Admin123!` — **cambia esa contraseña**
 en cuanto inicies sesión (`PUT /api/usuarios/me/password`).
+
+## Ejecución con Docker
+
+Alternativa a instalar Python y las dependencias en tu máquina. Solo
+necesitas Docker Desktop y tu archivo `.env` con la `DATABASE_URL`.
+
+```bash
+docker compose up -d --build     # construye la imagen y levanta la API
+docker compose ps                # estado y salud del contenedor
+docker compose logs -f api       # registros en vivo
+docker compose down              # detener y eliminar
+```
+
+La API queda en `http://localhost:5000` con **Gunicorn** (la misma forma de
+arranque que en producción, no el modo debug de `python app.py`).
+
+Para validar sin tocar la base de Neon, el compose incluye un PostgreSQL
+local bajo el perfil `pruebas`:
+
+```bash
+docker compose --profile pruebas up -d
+```
+
+Detalle de la imagen, variables de entorno y red: **`docs/docker.md`**.
+
+## Integración continua
+
+El workflow `.github/workflows/ci.yml` se ejecuta en cada push y pull
+request a `main`, `develop` y `ci/github-actions`, y también a mano desde la
+pestaña *Actions*. Ejecuta análisis estático con `flake8`, compila todos los
+módulos, hace una prueba de humo a `/api/health` y corre los 14 scripts de
+`test/run_all.py`. Las pruebas usan SQLite temporal, así que **no se conecta
+a Neon ni necesita secretos**, y no despliega nada: solo valida el código.
 
 ## Endpoints 
 

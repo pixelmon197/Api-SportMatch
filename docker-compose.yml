@@ -1,0 +1,81 @@
+# Orquestación local de Api-SportMatch.
+#
+# Levanta la API contenerizada para desarrollo y pruebas. La base de datos de
+# producción sigue administrada por Neon (no se contenariza PostgreSQL en esta
+# etapa): el servicio `api` se conecta a ella con la variable DATABASE_URL.
+#
+# Uso:
+#   docker compose up -d --build        API contra la base configurada en .env
+#   docker compose --profile pruebas up -d
+#                                       API + PostgreSQL local, sin tocar Neon
+#   docker compose ps                   estado de los servicios
+#   docker compose logs -f api          registros en vivo
+#   docker compose down                 detener y eliminar los contenedores
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sportmatch/api:1.7.1
+    container_name: sportmatch-api
+    restart: unless-stopped
+    ports:
+      # host:contenedor. La API queda accesible en http://localhost:5000
+      - "5000:5000"
+    environment:
+      # Los valores se toman del archivo .env del equipo (que está en
+      # .gitignore). Nunca se escriben credenciales en este archivo.
+      DATABASE_URL: ${DATABASE_URL:?falta DATABASE_URL en el archivo .env}
+      # Si no están en el .env se usan los valores de desarrollo de config.py.
+      SECRET_KEY: ${SECRET_KEY:-cambia-esta-clave-en-produccion}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-cambia-esta-clave-jwt-en-produccion}
+      COMISION_POR_DEFECTO: ${COMISION_POR_DEFECTO:-10}
+      # En producción debe ser false: con true cualquiera podría marcar un
+      # pago como pagado sin pagarlo (pasarela simulada).
+      SIMULAR_PASARELA: ${SIMULAR_PASARELA:-false}
+    volumes:
+      # Los archivos que suben los usuarios persisten fuera del contenedor.
+      - uploads:/app/static/uploads
+    networks:
+      - sportmatch-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Base de datos local, solo para el ambiente de pruebas. Se activa con
+  # `--profile pruebas` para que las validaciones de liberación no afecten la
+  # información real alojada en Neon.
+  db-pruebas:
+    image: postgres:16-alpine
+    container_name: sportmatch-db-pruebas
+    profiles: ["pruebas"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sportmatch_pruebas
+      POSTGRES_USER: sportmatch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sportmatch_local}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-pruebas-data:/var/lib/postgresql/data
+    networks:
+      - sportmatch-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sportmatch -d sportmatch_pruebas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  # Red interna propia: los servicios se localizan entre sí por su nombre
+  # (por ejemplo `db-pruebas:5432`) sin exponer puertos adicionales al host.
+  sportmatch-net:
+    driver: bridge
+
+volumes:
+  uploads:
+  db-pruebas-data:

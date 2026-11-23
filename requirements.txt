@@ -6,6 +6,11 @@ python-dotenv==1.0.1
 
 # Conexión a PostgreSQL (Neon)
 psycopg2-binary==2.9.9
+# SQLAlchemy 2.1 cambió el driver por defecto de postgresql:// a psycopg (v3),
+# que no está instalado: una instalación limpia arrancaría con
+# "ModuleNotFoundError: No module named 'psycopg'". Se fija en la serie 2.0,
+# que usa psycopg2.
+SQLAlchemy>=2.0,<2.1
 
 # Autenticación con JWT
 Flask-JWT-Extended==4.6.0
